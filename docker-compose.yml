@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: optik
+      POSTGRES_USER: optik
+      POSTGRES_PASSWORD: optik
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U optik -d optik']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # S3-compatible object storage for screenshots. Replace with your own S3
+  # (AWS, Garage, Ceph, …) by setting the S3_* variables and removing this service.
+  s3:
+    image: chrislusf/seaweedfs:4.48
+    command: server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json
+    volumes:
+      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+      - s3-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:8333/healthz || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - '3001:3001'
+    env_file:
+      - apps/api/.env
+    environment:
+      # Override localhost values from .env with Docker-internal addresses
+      DATABASE_URL: 'postgresql://optik:optik@postgres:5432/optik'
+      S3_ENDPOINT: 'http://s3:8333'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '5173:3000'
+    environment:
+      PUBLIC_API_URL: 'http://localhost:3001'
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  s3-data:

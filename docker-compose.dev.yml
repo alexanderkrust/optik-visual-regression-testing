@@ -1,0 +1,86 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: optik
+      POSTGRES_USER: optik
+      POSTGRES_PASSWORD: optik
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U optik -d optik']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # S3-compatible object storage for screenshots (SeaweedFS, Apache-2.0).
+  # Credentials are defined in docker/seaweedfs/s3.json; the API creates the bucket on startup.
+  s3:
+    image: chrislusf/seaweedfs:4.48
+    command: server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - '8333:8333'
+    volumes:
+      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+      - s3-dev-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:8333/healthz || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    ports:
+      - '3001:3001'
+    volumes:
+      # Source sync — changes trigger NestJS hot reload
+      - ./apps/api/src:/app/apps/api/src
+      - ./apps/api/prisma:/app/apps/api/prisma
+      - ./packages/shared/src:/app/packages/shared/src
+      # Only src/ is mounted; dist/ stays inside the container and is kept
+      # fresh by the tsc --watch process running alongside the API.
+      - ./packages/core/src:/app/packages/core/src
+    env_file:
+      - ./.env
+    environment:
+      DATABASE_URL: 'postgresql://optik:optik@postgres:5432/optik'
+      S3_ENDPOINT: 'http://s3:8333'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "require(\"http\").get(\"http://localhost:3001\",r=>process.exit(r.statusCode<500?0:1)).on(\"error\",()=>process.exit(1))"']
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    ports:
+      - '5173:5173'
+    volumes:
+      # Source sync — changes here trigger Vite HMR
+      - ./apps/web/src:/app/apps/web/src
+      - ./packages/shared/src:/app/packages/shared/src
+    env_file:
+      - ./.env
+    environment:
+      PUBLIC_API_URL: 'http://localhost:3001'
+      PRIVATE_API_URL: 'http://api:3001'
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-dev-data:
+  s3-dev-data:

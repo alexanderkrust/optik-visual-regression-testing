@@ -1,0 +1,37 @@
+{
+  "name": "@optik/vitest",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./global-setup": "./dist/global-setup.js",
+    "./setup": "./dist/setup.js"
+  },
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@optik/core": "workspace:*",
+    "@optik/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "vitest": ">=4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@vitest/browser-playwright": "^5.0.3",
+    "typescript": "^5.4.0",
+    "vitest": "^5.0.3"
+  }
+}

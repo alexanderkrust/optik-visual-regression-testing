@@ -1,0 +1,28 @@
+{
+  "name": "@optik/playwright",
+  "version": "0.1.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./global-setup": "./dist/global-setup.js",
+    "./global-teardown": "./dist/global-teardown.js"
+  },
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@optik/core": "workspace:*",
+    "@optik/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@playwright/test": "^1.40.0",
+    "typescript": "^5.4.0"
+  }
+}

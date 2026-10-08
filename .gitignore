@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.svelte-kit/
+
+# Environment — never commit real credentials
+.env
+.env.local
+.env.*.local
+
+# Data
+apps/api/data/
+
+# Turbo
+.turbo/
+
+# Test output
+test-results/
+playwright-report/
+coverage/
+__screenshots__/
+.vitest/
+
+# Local tool settings
+.claude/settings.local.json
+
+# OS
+.DS_Store

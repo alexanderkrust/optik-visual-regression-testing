@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "optik",
+      "credentials": [{ "accessKey": "optik", "secretKey": "optik-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

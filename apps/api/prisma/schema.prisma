@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Project {
+  id        String     @id @default(uuid())
+  name      String
+  slug      String     @unique
+  createdAt DateTime   @default(now()) @map("created_at")
+  runs      Run[]
+  tokens    ApiToken[]
+
+  @@map("projects")
+}
+
+model ApiToken {
+  id        String    @id @default(uuid())
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String    @map("project_id")
+  name      String
+  token     String    @unique
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("api_tokens")
+}
+
+enum RunStatus {
+  running
+  complete
+  approved
+  rejected
+}
+
+model Run {
+  id        String     @id @default(uuid())
+  project   Project    @relation(fields: [projectId], references: [id])
+  projectId String     @map("project_id")
+  branch    String
+  commitSha String     @map("commit_sha")
+  status    RunStatus  @default(running)
+  createdAt DateTime   @default(now()) @map("created_at")
+  // Consecutive runs without visual changes are merged into one run:
+  // updatedAt is the last time it ran, runCount how often, lastCommitSha the latest commit.
+  updatedAt     DateTime   @default(now()) @updatedAt @map("updated_at")
+  runCount      Int        @default(1) @map("run_count")
+  lastCommitSha String?    @map("last_commit_sha")
+  snapshots     Snapshot[]
+
+  @@index([projectId, branch, createdAt])
+  @@map("runs")
+}
+
+enum SnapshotStatus {
+  new // no baseline existed — becomes the baseline automatically
+  unchanged // identical to the baseline
+  pending // differs from the baseline, waiting for review
+  approved // reviewed and accepted — becomes the new baseline
+  rejected // reviewed and rejected — the previous baseline stays
+}
+
+model Snapshot {
+  id         String         @id @default(uuid())
+  run        Run            @relation(fields: [runId], references: [id])
+  runId      String         @map("run_id")
+  name       String
+  status     SnapshotStatus @default(new)
+  baseline   Snapshot?      @relation("baseline", fields: [baselineId], references: [id])
+  baselineId String?        @map("baseline_id")
+  children   Snapshot[]     @relation("baseline")
+  diffScore  Float?         @map("diff_score")
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  @@map("snapshots")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String         @map("password_hash")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
+}

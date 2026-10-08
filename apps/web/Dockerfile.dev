@@ -1,0 +1,19 @@
+FROM node:20-alpine
+WORKDIR /app
+RUN npm install -g pnpm@9
+
+# Install dependencies as a cached layer
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
+COPY packages/shared/package.json packages/shared/
+COPY apps/web/package.json apps/web/
+RUN pnpm install
+
+# Copy static config files (source is mounted via docker-compose volumes)
+COPY turbo.json ./
+COPY apps/web/svelte.config.js apps/web/vite.config.ts apps/web/tsconfig.json apps/web/
+#COPY apps/web/postcss.config.js apps/web/ 2>/dev/null || true
+
+# Generate SvelteKit types
+RUN pnpm --filter @optik/web exec svelte-kit sync
+
+CMD ["pnpm", "--filter", "@optik/web", "exec", "vite", "dev", "--host", "0.0.0.0", "--port", "5173"]
