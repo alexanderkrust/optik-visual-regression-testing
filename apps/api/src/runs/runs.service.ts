@@ -60,9 +60,12 @@ export class RunsService {
    * either: the new run is deleted and the previous one gets a bumped
    * `updatedAt`, `runCount` and `lastCommitSha`. Returns the run that remains.
    */
-  async complete(id: string): Promise<Run> {
+  async complete(projectId: string, id: string): Promise<Run> {
     const run = await this.prisma.run.findUnique({ where: { id }, include: INCLUDE });
-    if (!run) throw new NotFoundException(`Run "${id}" not found`);
+    // A token may only complete runs of its own project; don't reveal others
+    if (!run || run.projectId !== projectId) {
+      throw new NotFoundException(`Run "${id}" not found`);
+    }
 
     const target = await this.findMergeTarget(run);
     if (target) {

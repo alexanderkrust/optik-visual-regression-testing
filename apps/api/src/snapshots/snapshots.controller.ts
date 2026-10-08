@@ -56,6 +56,7 @@ export class SnapshotsController {
     }
 
     return this.snapshotsService.submit(
+      req.projectId,
       fields['runId'],
       fields['name'],
       imageBuffer,

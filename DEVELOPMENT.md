@@ -240,10 +240,24 @@ How the Vitest adapter is wired (useful when debugging):
 |-------|---------|
 | Everything | `pnpm test`, `pnpm lint`, `pnpm build` |
 | API unit tests | `pnpm --filter @optik/api test` |
-| API e2e tests | `pnpm --filter @optik/api test:e2e` |
+| API integration tests | `pnpm --filter @optik/api test:e2e` (see below) |
 | Web unit tests | `pnpm --filter @optik/web test:unit -- --run` |
 | Web type check | `pnpm --filter @optik/web check` |
 | Package type check | `pnpm --filter @optik/core lint` (same for `shared`, `vitest`, `playwright`) |
+
+### API integration tests
+
+`apps/api/test/*.e2e-spec.ts` start the real application (same setup as production, see `src/app.setup.ts`) on a random port and talk to it over HTTP — like the web UI and the adapters do. They cover setup and auth, projects and tokens (including project isolation), the review workflow, run merging and generated secrets.
+
+They need a PostgreSQL database they may wipe:
+
+- `TEST_DATABASE_URL` in `.env` (default `postgresql://optik:optik@localhost:5432/optik_test`). The database is created and migrated automatically. Its name **must end with `_test`** — the tests refuse to run otherwise, so they can never truncate a real database.
+- Images are stored in a temporary directory; the root `.env` values for S3 and the admin account are ignored.
+- Optional: set `TEST_S3_ENDPOINT=http://localhost:8333` to also test the S3 storage against the dev stack's SeaweedFS (skipped otherwise).
+
+```bash
+pnpm --filter @optik/api test:e2e
+```
 
 ## Troubleshooting
 

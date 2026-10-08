@@ -19,7 +19,10 @@ services:
   # Credentials are defined in docker/seaweedfs/s3.json; the API creates the bucket on startup.
   s3:
     image: chrislusf/seaweedfs:4.48
-    command: server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json
+    # SeaweedFS reserves several volume slots per bucket; the defaults (30 GB volumes,
+    # slots sized by free disk) leave room for barely one bucket. Volumes are not
+    # preallocated, so many small slots cost no disk space until data is written.
+    command: server -dir=/data -master.volumeSizeLimitMB=1024 -volume.max=100 -s3 -s3.config=/etc/seaweedfs/s3.json
     ports:
       - '8333:8333'
     volumes:

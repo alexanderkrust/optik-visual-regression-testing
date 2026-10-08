@@ -108,6 +108,9 @@ importers:
       '@types/pg':
         specifier: ^8.11.0
         version: 8.20.0
+      '@types/pngjs':
+        specifier: ^6.0.4
+        version: 6.0.5
       '@types/supertest':
         specifier: ^6.0.0
         version: 6.0.3
@@ -129,6 +132,9 @@ importers:
       jest:
         specifier: ^29.5.0
         version: 29.7.0(@types/node@20.19.39)(ts-node@10.9.2(@types/node@20.19.39)(typescript@5.9.3))
+      pngjs:
+        specifier: ^7.0.0
+        version: 7.0.0
       prettier:
         specifier: ^3.0.0
         version: 3.8.3

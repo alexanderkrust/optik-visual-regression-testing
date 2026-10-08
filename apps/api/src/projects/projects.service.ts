@@ -16,7 +16,6 @@ export class ProjectsService {
     const rows = await this.prisma.project.findMany({
       orderBy: { createdAt: 'desc' },
     });
-    console.log(rows);
     return rows.map(toDto);
   }
 

@@ -64,7 +64,7 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [ ] Helm chart for Kubernetes
 - [ ] Published, cosign-signed images with SBOM; tarball for air-gapped installs
 - [ ] CI pipeline for optik itself, semantic versioning, changelog
-- [ ] Meaningful API test coverage (today: one unit test)
+- [x] Meaningful API test coverage — integration tests against a real database (~96 % of lines)
 
 ## Phase 1 — Team-ready
 

@@ -39,7 +39,7 @@ export class RunsController {
     description:
       'A run without visual changes is merged into the previous run of the branch if that one had no changes either. Returns the remaining run.',
   })
-  complete(@Param('id') id: string) {
-    return this.runsService.complete(id);
+  complete(@Req() req: any, @Param('id') id: string) {
+    return this.runsService.complete(req.projectId, id);
   }
 }
