@@ -42,12 +42,20 @@ export class SnapshotsService {
    * - identical          → `unchanged` (image not stored — it equals the baseline)
    * - any pixel differs  → `pending` (needs review; adapters fail the test)
    */
-  async submit(runId: string, name: string, image: Buffer): Promise<SubmittedSnapshot> {
+  async submit(
+    projectId: string,
+    runId: string,
+    name: string,
+    image: Buffer,
+  ): Promise<SubmittedSnapshot> {
     const run = await this.prisma.run.findUnique({
       where: { id: runId },
       select: { id: true, projectId: true, project: { select: { slug: true } } },
     });
-    if (!run) throw new NotFoundException(`Run "${runId}" not found`);
+    // A token may only write to runs of its own project; don't reveal others
+    if (!run || run.projectId !== projectId) {
+      throw new NotFoundException(`Run "${runId}" not found`);
+    }
 
     let baseline = await this.prisma.snapshot.findFirst({
       where: {

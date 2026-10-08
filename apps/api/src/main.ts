@@ -8,8 +8,8 @@ import {
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import multipart from '@fastify/multipart';
 import { AppModule } from './app.module';
+import { configureApp } from './app.setup';
 import { ensureSecrets, loadFileSecrets } from './bootstrap/env';
 
 const logger = new Logger('Bootstrap');
@@ -25,15 +25,7 @@ async function bootstrap() {
     new FastifyAdapter({ trustProxy: true }),
   );
 
-  // Type cast needed: @fastify/multipart augments FastifyInstance with WebDAV methods
-  // that NestJS's type wrapper doesn't declare, causing a structural mismatch.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await app.register(multipart as any, {
-    limits: { fileSize: 50 * 1024 * 1024 },
-  });
-
-  // The API lives under /api; everything else is the web UI (same origin, no CORS)
-  app.setGlobalPrefix('api');
+  await configureApp(app);
 
   const config = new DocumentBuilder()
     .setTitle('Optik API')
