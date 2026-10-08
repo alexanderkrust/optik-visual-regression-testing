@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 
@@ -6,6 +6,12 @@ import { AuthService } from './auth.service';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Get('setup')
+  @ApiOperation({ summary: 'Whether the first-run setup (creating the admin) is still required' })
+  async setup() {
+    return { required: await this.authService.setupRequired() };
+  }
 
   @Post('register')
   @ApiOperation({

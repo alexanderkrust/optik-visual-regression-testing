@@ -1,19 +1,10 @@
 import type { Project, Run, Snapshot, UpdateSnapshotStatusDto, ApiToken, CreateApiTokenDto, CreatedApiTokenDto } from '@optik/shared';
 
-/** API URL as seen by the browser — use for anything rendered into HTML (e.g. image src). */
-function getPublicBaseUrl() {
-  return import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
-}
+/** The API is served under /api on the same origin as the web UI. */
+const BROWSER_BASE_URL = '/api';
 
-function getBaseUrl() {
-  if (typeof window !== 'undefined') return getPublicBaseUrl();
-  // Server-side: use internal URL if set (e.g. Docker service name)
-  return process.env.PRIVATE_API_URL ?? process.env.PUBLIC_API_URL ?? 'http://localhost:3001';
-}
-
-function makeRequest(accessToken?: string) {
+function makeRequest(baseUrl: string, accessToken?: string) {
   return async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const baseUrl = getBaseUrl();
     const authHeaders: Record<string, string> = accessToken
       ? { Authorization: `Bearer ${accessToken}` }
       : {};
@@ -27,8 +18,12 @@ function makeRequest(accessToken?: string) {
   };
 }
 
-export function createApi(accessToken?: string) {
-  const request = makeRequest(accessToken);
+/**
+ * API client. In the browser it uses relative /api URLs; server-side code must
+ * pass an absolute base URL — use `serverApi()` from `$lib/server/api`.
+ */
+export function createApi(accessToken?: string, baseUrl = BROWSER_BASE_URL) {
+  const request = makeRequest(baseUrl, accessToken);
   return {
     projects: {
       list: () => request<Project[]>('/projects'),
@@ -61,12 +56,9 @@ export function createApi(accessToken?: string) {
           method: 'PATCH',
           body: JSON.stringify({ status: 'rejected' } satisfies UpdateSnapshotStatusDto),
         }),
-      // Rendered during SSR too, so these must never use the server-internal URL
-      imageUrl: (id: string) => `${getPublicBaseUrl()}/snapshots/${id}/image`,
-      diffUrl: (id: string) => `${getPublicBaseUrl()}/snapshots/${id}/diff`,
+      // Rendered into HTML (also during SSR), so always the browser-relative URL
+      imageUrl: (id: string) => `${BROWSER_BASE_URL}/snapshots/${id}/image`,
+      diffUrl: (id: string) => `${BROWSER_BASE_URL}/snapshots/${id}/diff`,
     },
   };
 }
-
-// Backward-compatible default export (unauthenticated)
-export const api = createApi();

@@ -1,8 +1,8 @@
-import { createApi } from '$lib/api';
+import { serverApi } from '$lib/server/api';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-  const api = createApi(event.locals.accessToken ?? undefined);
+  const api = serverApi(event.locals);
   try {
     const projects = await api.projects.list();
     return { projects };

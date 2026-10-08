@@ -1,15 +1,27 @@
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
+import { loadEnv } from 'vite';
 import { playwright } from '@vitest/browser-playwright';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const envDir = resolve(__dirname, '../..');
+
+// In development the API runs separately; the browser calls /api on the Vite
+// server, which forwards it (production serves both from one process).
+const env = { ...loadEnv('development', envDir, ''), ...process.env };
+const apiTarget = env.API_INTERNAL_URL
+	? new URL(env.API_INTERNAL_URL).origin
+	: `http://localhost:${env.PORT ?? 3000}`;
 
 export default defineConfig({
-	envDir: resolve(__dirname, '../..'),
+	envDir,
 	plugins: [tailwindcss(), sveltekit()],
+	server: {
+		proxy: { '/api': apiTarget }
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

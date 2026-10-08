@@ -1,7 +1,11 @@
 import type { SubmittedSnapshot } from "@optik/shared"
 import { authFetch } from "./auth.js"
+import { apiUrl, serverUrl } from "./server.js"
 
-export type SnapshotResult = Pick<SubmittedSnapshot, "status" | "diffScore" | "reviewUrl">
+export type SnapshotResult = Pick<SubmittedSnapshot, "status" | "diffScore"> & {
+  /** Absolute link to the review page */
+  reviewUrl: string
+}
 
 /**
  * Uploads a screenshot to the Optik server. Runs in Node (inside the
@@ -14,7 +18,6 @@ export async function submitScreenshot(
 ): Promise<SnapshotResult> {
   const runId = process.env._OPTIK_RUN_ID
   const token = process.env._OPTIK_TOKEN
-  const serverUrl = process.env._OPTIK_SERVER_URL ?? "http://localhost:3001"
 
   if (!runId || !token) {
     throw new Error(
@@ -31,7 +34,7 @@ export async function submitScreenshot(
     `${name}.png`,
   )
 
-  const res = await authFetch(`${serverUrl}/snapshots`, token, {
+  const res = await authFetch(apiUrl("/snapshots"), token, {
     method: "POST",
     body: form,
   })
@@ -42,6 +45,6 @@ export async function submitScreenshot(
     )
   }
 
-  const { status, diffScore, reviewUrl } = (await res.json()) as SubmittedSnapshot
-  return { status, diffScore, reviewUrl }
+  const { status, diffScore, reviewPath } = (await res.json()) as SubmittedSnapshot
+  return { status, diffScore, reviewUrl: serverUrl() + reviewPath }
 }

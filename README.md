@@ -23,36 +23,28 @@ optik/
 
 ## Quick Start
 
-### Prerequisites
-- Node.js ≥ 20
-- pnpm ≥ 9
-
-### Install & run locally
+optik ships as **one Docker image** — web UI and API on one port. All it needs is PostgreSQL:
 
 ```bash
-pnpm install
-pnpm dev          # starts api on :3001 and web on :5173
+docker compose up -d
 ```
 
-### Run with Docker
+Open `http://localhost:3000` and create the administrator account. That's it:
+
+- database migrations run automatically on start
+- secrets (JWT, session) are generated on first start and stored in the database
+- screenshots are stored in the `optik-data` volume — or in S3-compatible storage if you configure it
+
+Without Docker Compose:
 
 ```bash
-docker compose up
-# API: http://localhost:3001
-# UI:  http://localhost:5173
+docker run -p 3000:3000 \
+  -e DATABASE_URL=postgresql://user:password@host:5432/optik \
+  -v optik-data:/data \
+  optik
 ```
 
-### First-time setup
-
-On the first startup the API automatically creates an admin user if none exists yet.
-Set the credentials in `.env` before starting:
-
-```env
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=your-secure-password
-```
-
-Then open `http://localhost:5173` and sign in with those credentials.
+For working on optik itself see [DEVELOPMENT.md](DEVELOPMENT.md); for what's planned see [ROADMAP.md](ROADMAP.md).
 
 ---
 
@@ -101,7 +93,7 @@ export default defineConfig({
   plugins: [
     optik({
       token: process.env.OPTIK_TOKEN!,     // project-scoped API token from the UI
-      serverUrl: 'http://localhost:3001', // optional, defaults to OPTIK_SERVER_URL or localhost
+      serverUrl: 'https://optik.example.com', // URL of your optik instance, defaults to OPTIK_SERVER_URL or http://localhost:3000
     }),
   ],
   test: {
@@ -169,7 +161,7 @@ import { optikConfig } from '@optik/playwright'
 export default defineConfig({
   ...optikConfig({
     token: 'optik_abc123',          // project-scoped API token from the UI
-    serverUrl: 'http://localhost:3001', // optional, defaults to OPTIK_SERVER_URL or localhost
+    serverUrl: 'https://optik.example.com', // URL of your optik instance, defaults to OPTIK_SERVER_URL or http://localhost:3000
   }),
   use: { baseURL: 'http://localhost:3000' },
 })
@@ -198,77 +190,76 @@ Tokens have the format `optik_<64 hex chars>` and can optionally be given an exp
 
 ## API Overview
 
+All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/api/docs`.
+
+### Health & setup
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Liveness check |
+| GET | `/api/ready` | Readiness check (database and storage reachable) |
+| GET | `/api/auth/setup` | Whether the first-run setup is still required |
+| POST | `/api/auth/register` | Create the first admin account (only while no user exists) |
+
 ### Auth
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/auth/login` | — | Sign in, receive access + refresh tokens |
-| POST | `/auth/refresh` | — | Exchange refresh token for a new access token |
-| POST | `/auth/logout` | — | Revoke refresh token |
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/login` | Sign in, receive access + refresh tokens |
+| POST | `/api/auth/refresh` | Exchange refresh token for a new access token |
+| POST | `/api/auth/logout` | Revoke refresh token |
 
 ### Projects & runs (JWT required)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/projects` | List all projects |
-| POST | `/projects` | Create a project |
-| GET | `/runs?project=slug` | List test runs for a project |
-| GET | `/runs/:id` | Get a single run |
-| GET | `/projects/:slug/tokens` | List API tokens |
-| POST | `/projects/:slug/tokens` | Create an API token |
-| DELETE | `/projects/:slug/tokens/:id` | Revoke an API token |
-| PATCH | `/snapshots/:id/status` | Accept (`approved`) or reject (`rejected`) a visual change |
+| GET | `/api/projects` | List all projects |
+| POST | `/api/projects` | Create a project |
+| GET | `/api/runs?project=slug` | List test runs for a project |
+| GET | `/api/runs/:id` | Get a single run |
+| GET | `/api/projects/:slug/tokens` | List API tokens |
+| POST | `/api/projects/:slug/tokens` | Create an API token |
+| DELETE | `/api/projects/:slug/tokens/:id` | Revoke an API token |
+| PATCH | `/api/snapshots/:id/status` | Accept (`approved`) or reject (`rejected`) a visual change |
 
 ### Adapter endpoints (API token required)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/runs` | Start a new run |
-| POST | `/runs/:id/complete` | Mark run complete |
-| POST | `/snapshots` | Submit a screenshot |
-| GET | `/snapshots/:id/image` | Serve PNG |
-| GET | `/snapshots/:id/diff` | Serve diff PNG |
-
-Swagger UI: `http://localhost:3001/api/docs`
+| POST | `/api/runs` | Start a new run |
+| POST | `/api/runs/:id/complete` | Mark run complete |
+| POST | `/api/snapshots` | Submit a screenshot |
+| GET | `/api/snapshots/:id/image` | Serve PNG |
+| GET | `/api/snapshots/:id/diff` | Serve diff PNG |
 
 ---
 
-## Environment Variables
+## Configuration
 
-All variables live in a single `.env` file at the repository root.
-Copy `.env.example` and fill in the values:
-
-```bash
-cp .env.example .env
-```
+Only `DATABASE_URL` is required. Every variable also accepts a `<NAME>_FILE` variant that reads the value from a file (Docker / Kubernetes secrets).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | — | PostgreSQL connection string |
-| `PORT` | `3001` | API HTTP port |
-| `CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin |
-| `WEB_URL` | `CORS_ORIGIN` | Public URL of the web UI, used for review links in failing tests |
+| `PORT` | `3000` | HTTP port for web UI and API |
+| `STORAGE_DIR` | `/data` (image), `./data` | Directory for screenshots when no S3 bucket is configured |
+| `S3_BUCKET` | — | Store screenshots in this S3 bucket instead (created on startup if missing) |
 | `S3_ENDPOINT` | — | S3 endpoint; leave empty for AWS S3 |
 | `S3_REGION` | `us-east-1` | S3 region |
-| `S3_BUCKET` | — | Bucket for screenshots and diffs (created on startup if missing) |
-| `S3_ACCESS_KEY_ID` | — | S3 access key |
-| `S3_SECRET_ACCESS_KEY` | — | S3 secret key |
+| `S3_ACCESS_KEY_ID` | — | S3 access key (required with `S3_BUCKET`) |
+| `S3_SECRET_ACCESS_KEY` | — | S3 secret key (required with `S3_BUCKET`) |
 | `S3_FORCE_PATH_STYLE` | `true` | Path-style URLs; required by most self-hosted S3 servers |
-| `JWT_SECRET` | — | Secret for signing JWTs (generate with `openssl rand -hex 32`) |
+| `JWT_SECRET` | generated | Secret for signing JWTs |
+| `SESSION_SECRET` | generated | Secret for encrypting the session cookie |
 | `JWT_ACCESS_EXPIRES` | `15m` | Access token lifetime |
 | `JWT_REFRESH_EXPIRES` | `7d` | Refresh token lifetime |
-| `ADMIN_EMAIL` | — | Email for the initial admin user (created on first startup) |
-| `ADMIN_PASSWORD` | — | Password for the initial admin user |
-| `PRIVATE_API_URL` | `http://localhost:3001` | API URL used by the SvelteKit server (e.g. Docker service name) |
-| `PUBLIC_API_URL` | `http://localhost:3001` | API URL used by the browser |
-| `SESSION_SECRET` | — | Secret for encrypting the session cookie (generate with `openssl rand -hex 32`) |
-| `OPTIK_SERVER_URL` | `http://localhost:3001` | Default server URL for adapters |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Create the admin account on start instead of the setup page (automated installs) |
+| `ORIGIN` | derived from request | Public URL, only needed if a reverse proxy doesn't send `X-Forwarded-Proto` / `X-Forwarded-Host` |
+
+Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL of your optik instance.
 
 ---
 
 ## Roadmap
 
-- [x] Phase 1: Core engine, NestJS API, SvelteKit UI, Vitest + Playwright adapters
-- [x] Phase 1.5: JWT auth, encrypted sessions, API tokens with expiry
-- [ ] Phase 2: Cypress adapter, GitHub Actions integration
-- [ ] Phase 3: Multi-user support, Slack notifications, CLI tool
+See [ROADMAP.md](ROADMAP.md).

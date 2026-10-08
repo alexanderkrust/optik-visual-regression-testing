@@ -1,5 +1,7 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { access, mkdir, readFile, writeFile } from 'fs/promises';
+import { dirname, resolve } from 'path';
 import {
   CreateBucketCommand,
   GetObjectCommand,
@@ -9,15 +11,97 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 
-/** Stores snapshot and diff images in an S3-compatible bucket. */
+/** Where snapshot and diff images are kept. */
+interface StorageBackend {
+  init(): Promise<void>;
+  ping(): Promise<boolean>;
+  put(key: string, body: Buffer): Promise<void>;
+  /** Resolves to null if the object does not exist. */
+  get(key: string): Promise<Buffer | null>;
+}
+
+/**
+ * Stores images in an S3-compatible bucket when S3_BUCKET is set, otherwise in
+ * a local directory (STORAGE_DIR, default ./data) — so a small installation
+ * needs no object storage at all.
+ */
 @Injectable()
 export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
-  private readonly client: S3Client;
-  private readonly bucket: string;
+  private readonly backend: StorageBackend;
 
   constructor(config: ConfigService) {
-    this.bucket = config.getOrThrow<string>('S3_BUCKET');
+    const bucket = config.get<string>('S3_BUCKET');
+    if (bucket) {
+      this.backend = new S3Backend(bucket, config);
+      this.logger.log(`Storing images in S3 bucket "${bucket}"`);
+    } else {
+      const dir = resolve(config.get<string>('STORAGE_DIR') ?? './data');
+      this.backend = new FileBackend(dir);
+      this.logger.log(`Storing images in ${dir}`);
+    }
+  }
+
+  onModuleInit() {
+    return this.backend.init();
+  }
+
+  /** True when the storage is reachable — used by the readiness check. */
+  ping(): Promise<boolean> {
+    return this.backend.ping();
+  }
+
+  put(key: string, body: Buffer): Promise<void> {
+    return this.backend.put(key, body);
+  }
+
+  async get(key: string): Promise<Buffer> {
+    const body = await this.backend.get(key);
+    if (!body) throw new NotFoundException('Image not found');
+    return body;
+  }
+}
+
+class FileBackend implements StorageBackend {
+  constructor(private readonly dir: string) {}
+
+  async init() {
+    await mkdir(this.dir, { recursive: true });
+  }
+
+  ping() {
+    return access(this.dir).then(() => true, () => false);
+  }
+
+  async put(key: string, body: Buffer) {
+    const path = this.path(key);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, body);
+  }
+
+  get(key: string) {
+    return readFile(this.path(key)).catch((err) => {
+      if (err.code === 'ENOENT') return null;
+      throw err;
+    });
+  }
+
+  private path(key: string) {
+    const path = resolve(this.dir, key);
+    // Keys are generated internally, but never allow escaping the storage dir
+    if (!path.startsWith(this.dir + '/')) throw new Error(`Invalid storage key "${key}"`);
+    return path;
+  }
+}
+
+class S3Backend implements StorageBackend {
+  private readonly logger = new Logger('S3Storage');
+  private readonly client: S3Client;
+
+  constructor(
+    private readonly bucket: string,
+    config: ConfigService,
+  ) {
     this.client = new S3Client({
       endpoint: config.get<string>('S3_ENDPOINT') || undefined,
       region: config.get<string>('S3_REGION') ?? 'us-east-1',
@@ -30,16 +114,19 @@ export class StorageService implements OnModuleInit {
     });
   }
 
-  async onModuleInit() {
-    try {
-      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
-    } catch {
-      this.logger.log(`Creating bucket "${this.bucket}"`);
-      await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
-    }
+  async init() {
+    if (await this.ping()) return;
+    this.logger.log(`Creating bucket "${this.bucket}"`);
+    await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
   }
 
-  async put(key: string, body: Buffer): Promise<void> {
+  ping() {
+    return this.client
+      .send(new HeadBucketCommand({ Bucket: this.bucket }))
+      .then(() => true, () => false);
+  }
+
+  async put(key: string, body: Buffer) {
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -50,14 +137,14 @@ export class StorageService implements OnModuleInit {
     );
   }
 
-  async get(key: string): Promise<Buffer> {
+  async get(key: string) {
     try {
       const res = await this.client.send(
         new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       );
       return Buffer.from(await res.Body!.transformToByteArray());
     } catch (err) {
-      if (err instanceof NoSuchKey) throw new NotFoundException('Image not found');
+      if (err instanceof NoSuchKey) return null;
       throw err;
     }
   }

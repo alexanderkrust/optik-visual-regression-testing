@@ -1,9 +1,9 @@
-import { createApi } from '$lib/api';
+import { serverApi } from '$lib/server/api';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-  const api = createApi(event.locals.accessToken ?? undefined);
+  const api = serverApi(event.locals);
   try {
     const projects = await api.projects.list();
     return { projects };
@@ -15,7 +15,7 @@ export const load: PageServerLoad = async (event) => {
 
 export const actions: Actions = {
   create: async (event) => {
-    const api = createApi(event.locals.accessToken ?? undefined);
+    const api = serverApi(event.locals);
     const data = await event.request.formData();
     const name = (data.get('name') as string)?.trim();
     const slug = (data.get('slug') as string)?.trim();

@@ -1,0 +1,16 @@
+**/node_modules
+**/dist
+**/build
+**/.svelte-kit
+**/.turbo
+**/.vitest
+**/test-results
+**/playwright-report
+**/coverage
+**/data
+.git
+.env
+.env.*
+!.env.example
+.claude
+**/.DS_Store

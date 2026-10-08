@@ -6,7 +6,7 @@ import { submitScreenshot } from "./submit.js"
 export interface OptikConfig {
   /** Project-scoped API token (optik_...) */
   token: string
-  /** Override the Optik server URL. Defaults to OPTIK_SERVER_URL env var or http://localhost:3001 */
+  /** Override the Optik server URL. Defaults to OPTIK_SERVER_URL env var or http://localhost:3000 */
   serverUrl?: string
 }
 

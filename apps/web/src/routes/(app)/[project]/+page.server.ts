@@ -1,9 +1,9 @@
-import { createApi } from '$lib/api';
+import { serverApi } from '$lib/server/api';
 import { error, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-  const api = createApi(event.locals.accessToken ?? undefined);
+  const api = serverApi(event.locals);
   try {
     const [runs, tokens] = await Promise.all([
       api.runs.list(event.params.project),
@@ -18,7 +18,7 @@ export const load: PageServerLoad = async (event) => {
 
 export const actions: Actions = {
   createToken: async (event) => {
-    const api = createApi(event.locals.accessToken ?? undefined);
+    const api = serverApi(event.locals);
     const data = await event.request.formData();
     const name = (data.get('name') as string | null)?.trim() ?? '';
     const expiresAtRaw = (data.get('expiresAt') as string | null)?.trim() ?? '';
@@ -38,7 +38,7 @@ export const actions: Actions = {
   },
 
   revokeToken: async (event) => {
-    const api = createApi(event.locals.accessToken ?? undefined);
+    const api = serverApi(event.locals);
     const data = await event.request.formData();
     const tokenId = data.get('tokenId') as string | null;
 

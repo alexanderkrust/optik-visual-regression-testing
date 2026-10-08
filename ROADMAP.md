@@ -50,17 +50,17 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 
 *Goal: a company gets optik running with one command and minimal configuration.*
 
-- [ ] Git repository, fix `.gitignore` (migrations must be committed)
-- [ ] **Single Docker image** for API + web UI, one port, API under `/api` — removes `CORS_ORIGIN`, `PUBLIC_API_URL`, `PRIVATE_API_URL`, `WEB_URL`
-- [ ] Migrations run automatically on start (`prisma migrate deploy`)
-- [ ] Health and readiness endpoints
-- [ ] Minimal configuration
-  - [ ] Only `DATABASE_URL` required
-  - [ ] `JWT_SECRET` / `SESSION_SECRET` generated on first start and stored in the database
-  - [ ] First-run setup wizard in the UI (create admin account) instead of `ADMIN_EMAIL` / `ADMIN_PASSWORD`
-  - [ ] Local volume storage by default, S3 optional
-  - [ ] `*_FILE` variants for secrets (Docker / Kubernetes secrets)
-- [ ] Working production `docker-compose.yml` (with Postgres)
+- [x] Git repository, fix `.gitignore` (migrations must be committed)
+- [x] **Single Docker image** for API + web UI, one port, API under `/api` — removes `CORS_ORIGIN`, `PUBLIC_API_URL`, `PRIVATE_API_URL`, `WEB_URL`
+- [x] Migrations run automatically on start (`prisma migrate deploy`)
+- [x] Health and readiness endpoints
+- [x] Minimal configuration
+  - [x] Only `DATABASE_URL` required
+  - [x] `JWT_SECRET` / `SESSION_SECRET` generated on first start and stored in the database
+  - [x] First-run setup wizard in the UI (create admin account) instead of `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+  - [x] Local volume storage by default, S3 optional
+  - [x] `*_FILE` variants for secrets (Docker / Kubernetes secrets)
+- [x] Working production `docker-compose.yml` (with Postgres)
 - [ ] Helm chart for Kubernetes
 - [ ] Published, cosign-signed images with SBOM; tarball for air-gapped installs
 - [ ] CI pipeline for optik itself, semantic versioning, changelog
@@ -72,6 +72,7 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 
 - [ ] **Baselines per branch** based on git ancestry: accepting a change on a feature branch must not affect `main` until merged (adapters send the merge-base commit)
 - [ ] **CI platform integration** (GitHub, GitLab, Bitbucket, Azure DevOps): commit status / check with review link, turns green after approval without re-running CI; "fail the test" stays available as an option
+- [ ] Separate runs per test suite (e.g. Vitest vs. Playwright in the same project and branch) — today a clean run is merged into the previous run of the branch regardless of the suite
 - [ ] Multiple users, roles (Admin, Reviewer, Developer/Viewer), per-project permissions, teams, invitations
 - [ ] Security fixes
   - [ ] Image endpoints require authentication (session cookie or signed, expiring URLs)

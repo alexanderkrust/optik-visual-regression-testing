@@ -4,6 +4,7 @@ import {
   OnModuleInit,
   UnauthorizedException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -52,6 +53,11 @@ export class AuthService implements OnModuleInit {
   }
 
   // ------------------------------------------------------------------ register
+  /** True until the first user exists — the web UI then shows the setup page. */
+  async setupRequired(): Promise<boolean> {
+    return (await (this.prisma as any).user.count()) === 0;
+  }
+
   async register(
     email: string,
     password: string,
@@ -60,13 +66,22 @@ export class AuthService implements OnModuleInit {
     refreshToken: string;
     user: { id: string; email: string };
   }> {
-    const count = await (this.prisma as any).user.count();
-    if (count > 0) {
-      throw new ForbiddenException('Initial setup already complete');
+    email = email?.trim() ?? '';
+    if (!/^[^\s@]+@[^\s@]+$/.test(email)) {
+      throw new BadRequestException('A valid email address is required');
+    }
+    if (!password || password.length < 8) {
+      throw new BadRequestException('The password must have at least 8 characters');
     }
     const hash = await bcrypt.hash(password, 10);
-    const user = (await (this.prisma as any).user.create({
-      data: { email, password: hash },
+
+    const user = (await this.prisma.$transaction(async (tx) => {
+      // Serialise concurrent setup attempts so only one admin can be created
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(482113)`;
+      if ((await tx.user.count()) > 0) {
+        throw new ForbiddenException('Initial setup already complete');
+      }
+      return tx.user.create({ data: { email, password: hash } });
     })) as UserRow;
 
     return this.issueTokens(user);

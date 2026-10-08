@@ -1,12 +1,9 @@
 import { getCurrentBranch, getCurrentCommit } from "@optik/core"
 import { authFetch } from "./auth.js"
+import { apiUrl } from "./server.js"
 
 export default async function globalSetup(): Promise<void> {
   const token = process.env._OPTIK_TOKEN ?? ""
-  const serverUrl =
-    process.env._OPTIK_SERVER_URL ??
-    process.env.OPTIK_SERVER_URL ??
-    "http://localhost:3001"
 
   if (!token) {
     throw new Error(
@@ -14,7 +11,7 @@ export default async function globalSetup(): Promise<void> {
     )
   }
 
-  const res = await authFetch(`${serverUrl}/runs`, token, {
+  const res = await authFetch(apiUrl("/runs"), token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -29,5 +26,4 @@ export default async function globalSetup(): Promise<void> {
 
   const run = (await res.json()) as { id: string }
   process.env._OPTIK_RUN_ID = run.id
-  process.env._OPTIK_SERVER_URL = serverUrl
 }

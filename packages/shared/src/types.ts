@@ -49,8 +49,8 @@ export type SnapshotStatus = 'new' | 'unchanged' | 'pending' | 'approved' | 'rej
 
 /** Response of `POST /snapshots`, consumed by the adapters. */
 export interface SubmittedSnapshot extends Snapshot {
-  /** Web UI link to review this snapshot. */
-  reviewUrl: string;
+  /** Path of the review page in the web UI, relative to the optik server URL. */
+  reviewPath: string;
 }
 
 export interface CreateProjectDto {

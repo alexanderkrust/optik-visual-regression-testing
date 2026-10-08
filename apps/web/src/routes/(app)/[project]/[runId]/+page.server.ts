@@ -1,9 +1,9 @@
-import { createApi } from '$lib/api';
+import { serverApi } from '$lib/server/api';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-  const api = createApi(event.locals.accessToken ?? undefined);
+  const api = serverApi(event.locals);
   try {
     const [run, snapshots] = await Promise.all([
       api.runs.get(event.params.runId),

@@ -2,6 +2,7 @@ import { resolve } from "path"
 import { test as base, expect } from "@playwright/test"
 import type { SubmittedSnapshot } from "@optik/shared"
 import { authFetch } from "./auth.js"
+import { apiUrl, serverUrl } from "./server.js"
 
 export { expect } from "@playwright/test"
 
@@ -10,7 +11,7 @@ export { expect } from "@playwright/test"
 export interface OptikConfig {
   /** Project-scoped API token (optik_...) */
   token: string
-  /** Override the Optik server URL. Defaults to OPTIK_SERVER_URL env var or http://localhost:3001 */
+  /** Override the Optik server URL. Defaults to OPTIK_SERVER_URL env var or http://localhost:3000 */
   serverUrl?: string
 }
 
@@ -60,7 +61,6 @@ interface OptikFixture {
 export const test = base.extend<{ optik: OptikFixture }>({
   optik: async ({ page }, use) => {
     const runId = process.env._OPTIK_RUN_ID
-    const serverUrl = process.env._OPTIK_SERVER_URL ?? "http://localhost:3001"
     const token = process.env._OPTIK_TOKEN ?? ""
 
     if (!runId || !token) {
@@ -82,7 +82,7 @@ export const test = base.extend<{ optik: OptikFixture }>({
           `${name}.png`,
         )
 
-        const res = await authFetch(`${serverUrl}/snapshots`, token, {
+        const res = await authFetch(apiUrl("/snapshots"), token, {
           method: "POST",
           body: form,
         })
@@ -98,7 +98,7 @@ export const test = base.extend<{ optik: OptikFixture }>({
           throw new Error(
             `Visual snapshot "${name}" differs from the approved baseline ` +
               `(${((result.diffScore ?? 0) * 100).toFixed(2)}% of pixels changed).\n` +
-              `Review it: ${result.reviewUrl}`,
+              `Review it: ${serverUrl()}${result.reviewPath}`,
           )
         }
       },

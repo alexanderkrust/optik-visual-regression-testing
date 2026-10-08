@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { computeDiff } from '@optik/core';
@@ -16,19 +15,10 @@ const BASELINE_STATUSES: SnapshotStatus[] = ['new', 'approved'];
 
 @Injectable()
 export class SnapshotsService {
-  private readonly webUrl: string;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
-    config: ConfigService,
-  ) {
-    this.webUrl = (
-      config.get<string>('WEB_URL') ??
-      config.get<string>('CORS_ORIGIN') ??
-      'http://localhost:5173'
-    ).replace(/\/$/, '');
-  }
+  ) {}
 
   async findByRun(runId: string): Promise<Snapshot[]> {
     const rows = await this.prisma.snapshot.findMany({
@@ -104,7 +94,7 @@ export class SnapshotsService {
 
     return {
       ...toDto(snapshot),
-      reviewUrl: `${this.webUrl}/${run.project.slug}/${runId}?snapshot=${snapshot.id}`,
+      reviewPath: `/${run.project.slug}/${runId}?snapshot=${snapshot.id}`,
     };
   }
 

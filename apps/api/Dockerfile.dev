@@ -24,7 +24,7 @@ ENV CHOKIDAR_USEPOLLING=true
 # they need a live database — postgres is not available during docker build.
 CMD ["sh", "-c", "\
   pnpm --filter @optik/api exec prisma generate && \
-  pnpm --filter @optik/api exec prisma migrate dev --name init && \
+  pnpm --filter @optik/api exec prisma migrate deploy && \
   { pnpm --filter @optik/core dev & } && \
   pnpm --filter @optik/api dev \
   "]
