@@ -8,6 +8,7 @@ import type {
   NotificationChannel,
   CreateInvitationDto,
   Invitation,
+  LicenseInfo,
   Project,
   ProjectMember,
   ProjectRole,
@@ -57,6 +58,11 @@ export function createApi(accessToken?: string, baseUrl = BROWSER_BASE_URL) {
   return {
     auth: {
       me: () => request<Pick<User, 'id' | 'email' | 'role'>>('/auth/me'),
+    },
+    license: {
+      get: () => request<LicenseInfo>('/license'),
+      set: (key: string) => request<LicenseInfo>('/license', { method: 'PUT', body: JSON.stringify({ key }) }),
+      remove: () => request<LicenseInfo>('/license', { method: 'DELETE' }),
     },
     users: {
       list: () => request<User[]>('/users'),

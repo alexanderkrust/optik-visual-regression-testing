@@ -12,13 +12,13 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done
 
 - The **core** (API, web UI, diff engine, Vitest/Playwright adapters, everything in Phase 0 and most of Phase 1) is open source.
 - **Enterprise features** live in a separate `ee/` directory under a commercial license and are unlocked by a license key.
-- Open decision: license of the core. Recommended: **Apache-2.0** (patent grant, accepted by enterprise legal teams).
+- License of the core: **Apache-2.0** (patent grant, accepted by enterprise legal teams).
 
 ### Editions
 
 | Edition | Audience | Contents |
 |---|---|---|
-| Community (free) | individuals, evaluation | all core features, limited projects/users |
+| Community (free) | individuals, evaluation, small teams | all core features, up to 5 reviewers |
 | Team | small companies | unlimited projects, roles, CI integration |
 | Enterprise | large organisations | + SSO/SAML/SCIM, audit log, retention policies, priority support |
 
@@ -96,14 +96,14 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 
 *Goal: a corporate IT / security department approves optik.*
 
-- [ ] License key verification and editions (can start in parallel to Phase 1, to onboard pilot customers early)
+- [x] License key verification and editions: Ed25519-signed keys checked offline, Community (5 reviewers) / Team / Enterprise, update period checked against the release's build date, trials; keys are issued with a separate, private license tool
 - [ ] SSO: OIDC (Entra ID, Okta, Keycloak, Google) and SAML 2.0; optional SCIM; role mapping from IdP groups
 - [ ] Teams (groups of users with project roles), mapped from IdP groups
 - [ ] Immutable, searchable, exportable audit log (approvals, rejections, tokens, permissions)
 - [ ] Retention policies for runs and images (baselines are always kept), storage usage per project
 - [ ] Observability: Prometheus metrics, structured JSON logs, OpenTelemetry tracing
 - [ ] High availability: stateless API behind a load balancer; backup & restore guide
-- [ ] License management in the admin UI (reviewer count, update period)
+- [x] License management in the admin UI (reviewer count, update period), `OPTIK_LICENSE`, notices for admins instead of lock-outs
 - [ ] No telemetry by default; documented data locations; accessible UI; German and English
 
 ## Phase 3 — Chromatic parity

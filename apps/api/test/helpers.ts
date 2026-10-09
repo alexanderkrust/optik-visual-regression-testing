@@ -1,4 +1,4 @@
-import { Test } from '@nestjs/testing';
+import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import {
   FastifyAdapter,
   NestFastifyApplication,
@@ -16,8 +16,10 @@ export interface TestApp {
 }
 
 /** Starts the real application (same setup as production) on a random port. */
-export async function startApp(): Promise<TestApp> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+export async function startApp(
+  configure: (builder: TestingModuleBuilder) => TestingModuleBuilder = (b) => b,
+): Promise<TestApp> {
+  const moduleRef = await configure(Test.createTestingModule({ imports: [AppModule] })).compile();
   const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
   await configureApp(app);
   await app.listen(0, '127.0.0.1');
