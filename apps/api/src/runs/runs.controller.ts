@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Param, Query, Body, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { RunsService } from './runs.service';
+import type { CurrentUser } from '../access/access.service';
+import { User } from '../access/current-user.decorator';
 import { TokenGuard } from '../tokens/token.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CreateRunDto } from '@optik/shared';
@@ -14,15 +16,15 @@ export class RunsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'List test runs for a project' })
   @ApiQuery({ name: 'project', required: true })
-  findByProject(@Query('project') project: string) {
-    return this.runsService.findByProject(project);
+  findByProject(@User() user: CurrentUser, @Query('project') project: string) {
+    return this.runsService.findByProject(user, project);
   }
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get a single run' })
-  findById(@Param('id') id: string) {
-    return this.runsService.findById(id);
+  findById(@User() user: CurrentUser, @Param('id') id: string) {
+    return this.runsService.findVisible(user, id);
   }
 
   @Post()

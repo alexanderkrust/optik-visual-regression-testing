@@ -60,6 +60,7 @@
       {data.projects.length === 1 ? '1 project' : `${data.projects.length} projects`}
     </p>
   </div>
+  {#if data.user.role === 'admin'}
   <Dialog bind:open={dialogOpen}>
     <DialogTrigger>
       {#snippet child({ props })}
@@ -133,6 +134,7 @@
       </form>
     </DialogContent>
   </Dialog>
+  {/if}
 </div>
 
 {#if data.projects.length === 0}

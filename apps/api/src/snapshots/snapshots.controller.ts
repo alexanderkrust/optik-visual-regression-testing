@@ -19,6 +19,9 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SnapshotsService } from './snapshots.service';
 import { ImageKind, ImageUrlSigner } from './image-urls';
 import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../database/prisma.service';
+import { AccessService, CurrentUser } from '../access/access.service';
+import { User } from '../access/current-user.decorator';
 import type { UpdateSnapshotStatusDto } from '@optik/shared';
 
 @ApiTags('snapshots')
@@ -28,14 +31,16 @@ export class SnapshotsController {
     private readonly snapshotsService: SnapshotsService,
     private readonly urls: ImageUrlSigner,
     private readonly jwt: JwtService,
+    private readonly prisma: PrismaService,
+    private readonly access: AccessService,
   ) {}
 
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'List snapshots for a run' })
   @ApiQuery({ name: 'runId', required: true })
-  findByRun(@Query('runId') runId: string) {
-    return this.snapshotsService.findByRun(runId);
+  findByRun(@User() user: CurrentUser, @Query('runId') runId: string) {
+    return this.snapshotsService.findByRun(user, runId);
   }
 
   @Post()
@@ -74,8 +79,12 @@ export class SnapshotsController {
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Approve or reject a snapshot' })
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateSnapshotStatusDto) {
-    return this.snapshotsService.updateStatus(id, dto);
+  updateStatus(
+    @User() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateSnapshotStatusDto,
+  ) {
+    return this.snapshotsService.updateStatus(user, id, dto);
   }
 
   @Get(':id/image')
@@ -90,7 +99,7 @@ export class SnapshotsController {
     @Headers('authorization') authorization: string | undefined,
     @Res() res,
   ) {
-    this.assertImageAccess(id, 'image', expires, signature, authorization);
+    await this.assertImageAccess(id, 'image', expires, signature, authorization);
     sendPng(res, await this.snapshotsService.getImageBuffer(id));
   }
 
@@ -106,12 +115,15 @@ export class SnapshotsController {
     @Headers('authorization') authorization: string | undefined,
     @Res() res,
   ) {
-    this.assertImageAccess(id, 'diff', expires, signature, authorization);
+    await this.assertImageAccess(id, 'diff', expires, signature, authorization);
     sendPng(res, await this.snapshotsService.getDiffBuffer(id));
   }
 
-  /** Images are private: a valid signed URL or a signed-in user (JWT) is required. */
-  private assertImageAccess(
+  /**
+   * Images are private: a valid signed URL, or a signed-in user (JWT) who can
+   * see the snapshot's project.
+   */
+  private async assertImageAccess(
     id: string,
     kind: ImageKind,
     expires: string | undefined,
@@ -120,11 +132,21 @@ export class SnapshotsController {
   ) {
     if (this.urls.verify(id, kind, expires, signature)) return;
     if (authorization?.startsWith('Bearer ')) {
+      let userId: string | null = null;
       try {
-        this.jwt.verify(authorization.slice(7));
-        return;
+        userId = this.jwt.verify<{ sub: string }>(authorization.slice(7)).sub;
       } catch {
-        // fall through
+        // invalid token: fall through
+      }
+      const user = userId
+        ? await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, role: true },
+          })
+        : null;
+      if (user) {
+        await this.access.requireSnapshot(user, id, 'viewer');
+        return;
       }
     }
     throw new UnauthorizedException('The image URL is invalid or has expired');

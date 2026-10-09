@@ -116,6 +116,21 @@ export class AdminClient {
     return call(`${this.api}/runs/${id}`, { token: this.jwt });
   }
 
+  /** Invites `email` and accepts the invitation; returns the new user's client. */
+  async inviteUser(
+    email: string,
+    opts: { role?: 'admin' | 'member'; projectSlug?: string; projectRole?: string } = {},
+  ): Promise<AdminClient> {
+    const invite = await call(`${this.api}/invitations`, { token: this.jwt, json: { email, ...opts } });
+    if (invite.status !== 201) throw new Error(`invite failed: ${invite.status}`);
+    const token = invite.body.invitePath.split('/').pop();
+    const accepted = await call(`${this.api}/invitations/token/${token}/accept`, {
+      json: { password: 'correct-horse' },
+    });
+    if (accepted.status !== 201) throw new Error(`accept failed: ${accepted.status}`);
+    return new AdminClient(this.api, accepted.body.accessToken);
+  }
+
   runs(slug: string) {
     return call(`${this.api}/runs?project=${slug}`, { token: this.jwt });
   }
