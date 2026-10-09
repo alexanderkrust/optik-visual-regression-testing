@@ -12,5 +12,5 @@ export function apiBase(): string {
 
 /** API client for load functions and actions, authenticated as the current user. */
 export function serverApi(locals: App.Locals) {
-  return createApi(locals.accessToken ?? undefined, apiBase());
+  return createApi(locals.accessToken ?? undefined, apiBase(), locals.forwarded);
 }
