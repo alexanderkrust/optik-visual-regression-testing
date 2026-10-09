@@ -50,7 +50,8 @@
     TableCell,
   } from '$lib/components/ui/table';
   import type { PageData, ActionData } from './$types';
-  import type { Run } from '@optik/shared';
+  import type { CiProvider, Run } from '@optik/shared';
+  import { untrack } from 'svelte';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -69,6 +70,50 @@
     'h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
 
   let activeTab = $state('runs');
+
+  /** Form hints per CI system (see CiProvider in @optik/shared) */
+  const CI_PROVIDERS: Record<
+    CiProvider,
+    { label: string; repository: string; token: string; apiUrl: string; apiUrlNote: string | null }
+  > = {
+    github: {
+      label: 'GitHub',
+      repository: 'owner/repo',
+      token: 'Fine-grained token with "Commit statuses: write"',
+      apiUrl: 'https://github.example.com/api/v3',
+      apiUrlNote: 'GitHub Enterprise Server only',
+    },
+    gitlab: {
+      label: 'GitLab',
+      repository: 'group/project or project ID',
+      token: 'Project access token, role Developer, scope "api"',
+      apiUrl: 'https://gitlab.example.com/api/v4',
+      apiUrlNote: 'self-managed GitLab only',
+    },
+    bitbucket: {
+      label: 'Bitbucket Cloud',
+      repository: 'workspace/repository',
+      token: 'Repository access token, or email:API token',
+      apiUrl: '',
+      apiUrlNote: null,
+    },
+    bitbucket_server: {
+      label: 'Bitbucket Data Center',
+      repository: 'PROJECT/repository',
+      token: 'HTTP access token of the repository',
+      apiUrl: 'https://bitbucket.example.com',
+      apiUrlNote: 'required',
+    },
+    azure_devops: {
+      label: 'Azure DevOps',
+      repository: 'project/repository',
+      token: 'Personal access token with "Code (status)"',
+      apiUrl: 'https://dev.azure.com/your-organization',
+      apiUrlNote: 'organization or collection URL, required',
+    },
+  };
+  let ciProvider = $state<CiProvider | ''>(untrack(() => data.project.ciProvider ?? ''));
+  const ci = $derived(ciProvider ? CI_PROVIDERS[ciProvider] : null);
 
   const now = new Date();
   const hasValidToken = $derived(
@@ -563,30 +608,48 @@
           <Separator />
 
           <div class="space-y-1">
-            <h3 class="text-sm font-semibold">GitHub commit status</h3>
+            <h3 class="text-sm font-semibold">Commit status</h3>
             <p class="text-xs text-muted-foreground">
-              Each run reports a status (<code>optik/&lt;suite&gt;</code>) with a link to the review.
-              It turns green once all changes are accepted — no need to re-run CI.
+              Each run reports a status (<code>optik/&lt;suite&gt;</code>) to your CI system, with a
+              link to the review. It turns green once all changes are accepted — no need to re-run CI.
             </p>
           </div>
           <div class="space-y-1.5">
-            <Label for="github-repo">Repository</Label>
-            <Input id="github-repo" name="githubRepo" value={data.project.githubRepo ?? ''} placeholder="owner/repo" class="font-mono" />
+            <Label for="ci-provider">CI system</Label>
+            <select id="ci-provider" name="ciProvider" class="{selectClass} w-full" bind:value={ciProvider}>
+              <option value="">Off</option>
+              {#each Object.entries(CI_PROVIDERS) as [value, provider] (value)}
+                <option {value}>{provider.label}</option>
+              {/each}
+            </select>
           </div>
-          <div class="space-y-1.5">
-            <Label for="github-token">Token</Label>
-            <Input
-              id="github-token"
-              name="githubToken"
-              type="password"
-              autocomplete="off"
-              placeholder={data.project.githubTokenConfigured ? 'Stored — leave empty to keep' : 'Fine-grained token with "Commit statuses: write"'}
-            />
-          </div>
-          <div class="space-y-1.5">
-            <Label for="github-api-url">API URL <span class="font-normal text-muted-foreground">(GitHub Enterprise Server only)</span></Label>
-            <Input id="github-api-url" name="githubApiUrl" value={data.project.githubApiUrl ?? ''} placeholder="https://github.example.com/api/v3" class="font-mono" />
-          </div>
+          {#if ci}
+            <div class="space-y-1.5">
+              <Label for="ci-repository">Repository</Label>
+              <Input id="ci-repository" name="ciRepository" value={data.project.ciRepository ?? ''} placeholder={ci.repository} class="font-mono" />
+            </div>
+            <div class="space-y-1.5">
+              <Label for="ci-token">Token</Label>
+              <Input
+                id="ci-token"
+                name="ciToken"
+                type="password"
+                autocomplete="off"
+                placeholder={data.project.ciTokenConfigured && ciProvider === data.project.ciProvider ? 'Stored — leave empty to keep' : ci.token}
+              />
+            </div>
+            {#if ci.apiUrlNote}
+              <div class="space-y-1.5">
+                <Label for="ci-api-url">API URL <span class="font-normal text-muted-foreground">({ci.apiUrlNote})</span></Label>
+                <Input id="ci-api-url" name="ciApiUrl" value={data.project.ciApiUrl ?? ''} placeholder={ci.apiUrl} class="font-mono" />
+              </div>
+            {:else}
+              <input type="hidden" name="ciApiUrl" value="" />
+            {/if}
+            <p class="text-xs text-muted-foreground">
+              The token is stored encrypted. Changing the CI system or API URL removes it — enter it again.
+            </p>
+          {/if}
 
           <Separator />
 

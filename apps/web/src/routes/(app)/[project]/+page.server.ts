@@ -1,7 +1,7 @@
 import { serverApi } from '$lib/server/api';
 import { error, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import type { NotificationChannelType, NotificationEvent, ProjectRole } from '@optik/shared';
+import type { CiProvider, NotificationChannelType, NotificationEvent, ProjectRole } from '@optik/shared';
 
 export const load: PageServerLoad = async (event) => {
   const api = serverApi(event.locals);
@@ -59,18 +59,18 @@ export const actions: Actions = {
       await api.projects.update(event.params.project, {
         defaultBranch,
         failTestsOnChanges: data.get('failTestsOnChanges') === 'on',
-        githubRepo: field('githubRepo'),
-        githubApiUrl: field('githubApiUrl'),
+        ciProvider: field('ciProvider') as CiProvider | '',
+        ciRepository: field('ciRepository'),
+        ciApiUrl: field('ciApiUrl'),
         // Empty keeps the stored token; it is never sent back to the browser
-        ...(field('githubToken') ? { githubToken: field('githubToken') } : {}),
+        ...(field('ciToken') ? { ciToken: field('ciToken') } : {}),
       });
       return { settingsSaved: true };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.startsWith('400')) {
-        return fail(400, {
-          settingsError: 'Check the values: branch name, repository as "owner/repo", API URL as http(s) URL',
-        });
+        // "400 Bad Request: The GitLab repository must look like …"
+        return fail(400, { settingsError: msg.replace(/^400[^:]*:\s*/, '') });
       }
       return fail(500, { settingsError: `Failed to save: ${msg}` });
     }
