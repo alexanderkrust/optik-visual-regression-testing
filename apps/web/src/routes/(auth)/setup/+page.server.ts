@@ -10,7 +10,7 @@ export const load: PageServerLoad = async () => {
 };
 
 export const actions: Actions = {
-  default: async ({ request, cookies, url }) => {
+  default: async ({ request, cookies, url, locals }) => {
     const data = await request.formData();
     const email = (data.get('email') as string | null)?.trim() ?? '';
     const password = (data.get('password') as string | null) ?? '';
@@ -24,7 +24,7 @@ export const actions: Actions = {
     try {
       res = await fetch(`${apiBase()}/auth/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...locals.forwarded },
         body: JSON.stringify({ email, password }),
       });
     } catch {

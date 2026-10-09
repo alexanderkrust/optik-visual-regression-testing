@@ -7,6 +7,7 @@ import type {
   CreatedApiTokenDto,
 } from '@optik/shared';
 import type { ApiToken as TokenRow } from '@prisma/client';
+import { AuditTrail } from '../audit/audit-trail';
 
 /** Visible part of a token, e.g. "optik_3f9a1c" — enough to recognise it. */
 const PREFIX_LENGTH = 12;
@@ -21,7 +22,10 @@ export function hashToken(token: string): string {
 
 @Injectable()
 export class TokensService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditTrail,
+  ) {}
 
   async findByProject(projectSlug: string): Promise<ApiToken[]> {
     const rows = await this.prisma.apiToken.findMany({
@@ -51,6 +55,12 @@ export class TokensService {
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
       },
     });
+    await this.audit.record({
+      action: 'token.created',
+      project: { id: project.id, slug: project.slug },
+      target: { type: 'token', id: row.id, label: row.name },
+      details: { prefix: row.tokenPrefix, expiresAt: row.expiresAt?.toISOString() ?? null },
+    });
     return { ...toDto(row), token: rawToken };
   }
 
@@ -60,18 +70,24 @@ export class TokensService {
     });
     if (!row) throw new NotFoundException(`Token "${tokenId}" not found`);
     await this.prisma.apiToken.delete({ where: { id: tokenId } });
+    await this.audit.record({
+      action: 'token.revoked',
+      project: { id: row.projectId, slug: projectSlug },
+      target: { type: 'token', id: row.id, label: row.name },
+      details: { prefix: row.tokenPrefix },
+    });
   }
 
   async findByToken(
     token: string,
-  ): Promise<{ projectId: string; projectSlug: string } | null> {
+  ): Promise<{ id: string; name: string; projectId: string; projectSlug: string } | null> {
     const row = await this.prisma.apiToken.findUnique({
       where: { tokenHash: hashToken(token) },
       include: { project: { select: { slug: true } } },
     });
     if (!row) return null;
     if (row.expiresAt && row.expiresAt < new Date()) return null;
-    return { projectId: row.projectId, projectSlug: row.project.slug };
+    return { id: row.id, name: row.name, projectId: row.projectId, projectSlug: row.project.slug };
   }
 }
 

@@ -28,6 +28,14 @@ packages/
     playwright/   @optik/playwright
 ```
 
+### Open core: `ee/` directories
+
+Everything is Apache-2.0 except directories named `ee` (and `(ee)` route groups in the web app), which are under the [optik Enterprise License](ee/LICENSE): `apps/api/src/ee/`, `apps/web/src/routes/(app)/(ee)/`. Each file there starts with a header naming that license. Rules of thumb:
+
+- Core code never imports from `ee/`. It reports what happens through small open interfaces (e.g. `AuditTrail` in `src/audit/`), and the `ee` module plugs into them.
+- Enterprise features check the license: `LicenseService.require('audit_log')` for endpoints, `has()` for background work.
+- Licenses for local testing: `optik-license sign` in the private [license tool](https://github.com/alexanderkrust/optik-license-tool) (e.g. a trial with `--valid-until`). Remove them again from `instance_settings` when done.
+
 Workspace packages are consumed through their **built `dist/`**, not their sources. After changing `core`, `shared` or an adapter, rebuild it (or run its `dev` watcher) before the change is visible to its consumers.
 
 ## First-time setup
@@ -255,6 +263,7 @@ They need a PostgreSQL database they may wipe:
 - `TEST_DATABASE_URL` in `.env` (default `postgresql://optik:optik@localhost:5432/optik_test`). The database is created and migrated automatically. Its name **must end with `_test`** — the tests refuse to run otherwise, so they can never truncate a real database.
 - Images are stored in a temporary directory; the root `.env` values for S3 and the admin account are ignored.
 - Optional: set `TEST_S3_ENDPOINT=http://localhost:8333` to also test the S3 storage against the dev stack's SeaweedFS (skipped otherwise).
+- License tests sign keys with a throwaway key (`test/license-keys.ts`), passed in with `startApp((b) => b.overrideProvider(LICENSE_KEYS)…)`. There is deliberately no environment variable that adds trusted keys.
 
 ```bash
 pnpm --filter @optik/api test:e2e

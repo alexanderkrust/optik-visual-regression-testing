@@ -31,6 +31,7 @@ export class TokenGuard implements CanActivate {
 
     req.projectId = result.projectId;
     req.projectSlug = result.projectSlug;
+    req.apiToken = { id: result.id, name: result.name };
     return true;
   }
 }

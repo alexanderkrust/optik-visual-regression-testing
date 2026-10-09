@@ -14,6 +14,8 @@ import { SnapshotsModule } from './snapshots/snapshots.module';
 import { TokensModule } from './tokens/tokens.module';
 import { AuthModule } from './auth/auth.module';
 import { LicenseModule } from './license/license.module';
+import { AuditModule } from './audit/audit.module';
+import { AuditLogModule } from './ee/audit/audit-log.module';
 
 @Module({
   imports: [
@@ -36,6 +38,9 @@ import { LicenseModule } from './license/license.module';
     UsersModule,
     NotificationsModule,
     LicenseModule,
+    AuditModule,
+    // Enterprise (ee/): only active with a license that includes the feature
+    AuditLogModule,
   ],
   controllers: [AppController],
 })

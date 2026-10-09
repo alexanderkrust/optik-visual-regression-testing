@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { User, UserRole } from '@optik/shared';
 import { PrismaService } from '../database/prisma.service';
 import { AccessService, CurrentUser } from '../access/access.service';
+import { AuditTrail } from '../audit/audit-trail';
 
 const USER_ROLES: UserRole[] = ['admin', 'member'];
 
@@ -18,6 +19,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
+    private readonly audit: AuditTrail,
   ) {}
 
   async list(admin: CurrentUser): Promise<User[]> {
@@ -31,15 +33,24 @@ export class UsersService {
     role = userRole(role);
     const user = await this.find(id);
     if (user.role === 'admin' && role !== 'admin') await this.assertNotLastAdmin();
-    return toDto(await this.prisma.user.update({ where: { id }, data: { role } }));
+    const updated = await this.prisma.user.update({ where: { id }, data: { role } });
+    if (user.role !== role) {
+      await this.audit.record({
+        action: 'user.role_changed',
+        target: { type: 'user', id, label: user.email },
+        details: { from: user.role, to: role },
+      });
+    }
+    return toDto(updated);
   }
 
   /** Removes the account; its reviews stay, without a reviewer. */
   async remove(admin: CurrentUser, id: string): Promise<void> {
     this.access.requireAdmin(admin);
     if (id === admin.id) throw new BadRequestException('You cannot remove your own account');
-    await this.find(id);
+    const user = await this.find(id);
     await this.prisma.user.delete({ where: { id } });
+    await this.audit.record({ action: 'user.removed', target: { type: 'user', id, label: user.email } });
   }
 
   private async find(id: string) {
