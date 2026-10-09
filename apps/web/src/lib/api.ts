@@ -1,5 +1,7 @@
 import type {
   ApiToken,
+  AuditEventPage,
+  AuditVerification,
   CreateApiTokenDto,
   CreatedApiTokenDto,
   CreatedInvitation,
@@ -25,7 +27,7 @@ import type {
 /** The API is served under /api on the same origin as the web UI. */
 const BROWSER_BASE_URL = '/api';
 
-function makeRequest(baseUrl: string, accessToken?: string) {
+function makeRequest(baseUrl: string, accessToken?: string, extraHeaders: Record<string, string> = {}) {
   return async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const authHeaders: Record<string, string> = accessToken
       ? { Authorization: `Bearer ${accessToken}` }
@@ -36,7 +38,7 @@ function makeRequest(baseUrl: string, accessToken?: string) {
       : {};
     const res = await fetch(`${baseUrl}${path}`, {
       ...init,
-      headers: { ...contentType, ...authHeaders, ...init?.headers },
+      headers: { ...contentType, ...extraHeaders, ...authHeaders, ...init?.headers },
     });
     if (!res.ok) {
       // "400 Bad Request: optik needs at least one admin" — keeps the API's message for the UI
@@ -53,11 +55,21 @@ function makeRequest(baseUrl: string, accessToken?: string) {
  * API client. In the browser it uses relative /api URLs; server-side code must
  * pass an absolute base URL — use `serverApi()` from `$lib/server/api`.
  */
-export function createApi(accessToken?: string, baseUrl = BROWSER_BASE_URL) {
-  const request = makeRequest(baseUrl, accessToken);
+export function createApi(
+  accessToken?: string,
+  baseUrl = BROWSER_BASE_URL,
+  /** Server side only: client address and browser for the API's audit log */
+  extraHeaders: Record<string, string> = {},
+) {
+  const request = makeRequest(baseUrl, accessToken, extraHeaders);
   return {
     auth: {
       me: () => request<Pick<User, 'id' | 'email' | 'role'>>('/auth/me'),
+    },
+    audit: {
+      /** Query string as the API takes it (q, action, project, from, to, before, limit) */
+      list: (query: string) => request<AuditEventPage>(`/audit-events?${query}`),
+      verify: () => request<AuditVerification>('/audit-events/verify'),
     },
     license: {
       get: () => request<LicenseInfo>('/license'),

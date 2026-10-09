@@ -346,3 +346,67 @@ export interface LicenseInfo {
 export interface UpdateLicenseDto {
   key: string;
 }
+
+// ------------------------------------------------------------------ audit log
+
+/** What happened — recorded in the audit log (Enterprise). */
+export type AuditAction =
+  | 'auth.setup'
+  | 'auth.login'
+  | 'auth.login_failed'
+  | 'user.role_changed'
+  | 'user.removed'
+  | 'invitation.created'
+  | 'invitation.revoked'
+  | 'invitation.accepted'
+  | 'project.created'
+  | 'project.updated'
+  | 'member.added'
+  | 'member.role_changed'
+  | 'member.removed'
+  | 'token.created'
+  | 'token.revoked'
+  | 'snapshot.approved'
+  | 'snapshot.rejected'
+  | 'snapshot.settings_updated'
+  | 'comment.created'
+  | 'comment.deleted'
+  | 'notification_channel.created'
+  | 'notification_channel.removed'
+  | 'license.installed'
+  | 'license.removed';
+
+export interface AuditActor {
+  /** A signed-in user, a project's API token (adapters), or nobody (e.g. a failed sign-in) */
+  type: 'user' | 'token' | 'anonymous';
+  id: string | null;
+  /** E-mail of the user, name of the token — kept when they are removed later */
+  label: string | null;
+}
+
+export interface AuditEvent {
+  /** Position in the log; events are never changed or removed */
+  seq: number;
+  createdAt: string;
+  action: AuditAction;
+  actor: AuditActor;
+  project: { id: string; slug: string } | null;
+  target: { type: string; id: string; label: string | null } | null;
+  details: Record<string, unknown>;
+  ip: string | null;
+  userAgent: string | null;
+}
+
+/** `GET /audit-events`, newest first. Pass `nextCursor` as `before` for the next page. */
+export interface AuditEventPage {
+  events: AuditEvent[];
+  nextCursor: number | null;
+}
+
+/** `GET /audit-events/verify`: whether the hash chain is intact. */
+export interface AuditVerification {
+  valid: boolean;
+  checked: number;
+  /** First event whose hash doesn't match — the log was changed from there on */
+  firstInvalidSeq: number | null;
+}

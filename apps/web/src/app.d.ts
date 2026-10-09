@@ -6,6 +6,8 @@ declare global {
 		interface Locals {
 			user: { id: string; email: string } | null;
 			accessToken: string | null;
+			/** Client address and browser, passed on to the API for its audit log */
+			forwarded: Record<string, string>;
 		}
 		// interface PageData {}
 		// interface PageState {}

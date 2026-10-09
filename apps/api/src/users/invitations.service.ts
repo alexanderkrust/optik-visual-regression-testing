@@ -21,6 +21,7 @@ import { MailerService } from '../notifications/mailer.service';
 import { publicUrl } from '../common/public-url';
 import { projectRole } from '../projects/projects.service';
 import { userRole } from './users.service';
+import { AuditTrail } from '../audit/audit-trail';
 
 const VALID_DAYS = 7;
 const EMAIL = /^[^\s@]+@[^\s@]+$/;
@@ -40,6 +41,7 @@ export class InvitationsService {
     private readonly auth: AuthService,
     private readonly mailer: MailerService,
     private readonly config: ConfigService,
+    private readonly audit: AuditTrail,
   ) {}
 
   async create(admin: CurrentUser, dto: CreateInvitationDto): Promise<CreatedInvitation> {
@@ -51,11 +53,13 @@ export class InvitationsService {
     }
 
     let projectId: string | null = null;
+    let projectSlug: string | null = null;
     let role: ProjectRole | null = null;
     if (dto.projectSlug) {
       const project = await this.prisma.project.findUnique({ where: { slug: dto.projectSlug } });
       if (!project) throw new NotFoundException(`Project "${dto.projectSlug}" not found`);
       projectId = project.id;
+      projectSlug = project.slug;
       role = projectRole(dto.projectRole ?? 'viewer');
     }
 
@@ -85,6 +89,12 @@ export class InvitationsService {
           ].join('\n\n'),
         })
       : false;
+    await this.audit.record({
+      action: 'invitation.created',
+      project: projectId && projectSlug ? { id: projectId, slug: projectSlug } : null,
+      target: { type: 'invitation', id: row.id, label: email },
+      details: { role: row.role, projectRole: row.projectRole, emailSent },
+    });
     return { ...toDto(row), invitePath, emailSent };
   }
 
@@ -101,7 +111,14 @@ export class InvitationsService {
 
   async revoke(admin: CurrentUser, id: string): Promise<void> {
     this.access.requireAdmin(admin);
+    const invitation = await this.prisma.invitation.findFirst({ where: { id, acceptedAt: null } });
     await this.prisma.invitation.deleteMany({ where: { id, acceptedAt: null } });
+    if (invitation) {
+      await this.audit.record({
+        action: 'invitation.revoked',
+        target: { type: 'invitation', id, label: invitation.email },
+      });
+    }
   }
 
   /** What the invite page shows — public, the token is the credential. */
@@ -116,7 +133,7 @@ export class InvitationsService {
     }
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const user = await this.prisma.$transaction(async (tx) => {
+    const { user, invitation } = await this.prisma.$transaction(async (tx) => {
       const invitation = await tx.invitation.findUnique({ where: { tokenHash: hash(token) } });
       if (!invitation || invitation.acceptedAt || invitation.expiresAt < new Date()) {
         throw new NotFoundException('This invitation is invalid or has expired');
@@ -133,9 +150,19 @@ export class InvitationsService {
         });
       }
       await tx.invitation.update({ where: { id: invitation.id }, data: { acceptedAt: new Date() } });
-      return created;
+      return { user: created, invitation };
     });
 
+    const project = invitation.projectId
+      ? await this.prisma.project.findUnique({ where: { id: invitation.projectId }, select: { id: true, slug: true } })
+      : null;
+    await this.audit.record({
+      action: 'invitation.accepted',
+      actor: { type: 'user', id: user.id, label: user.email },
+      project,
+      target: { type: 'invitation', id: invitation.id, label: user.email },
+      details: { role: user.role, projectRole: invitation.projectRole },
+    });
     return this.auth.issueTokens(user);
   }
 

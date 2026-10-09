@@ -5,14 +5,14 @@ import { COOKIE_NAME, sessionSecret } from '$lib/server/session-cookie';
 import type { Actions } from './$types';
 
 export const actions: Actions = {
-  default: async ({ cookies }) => {
+  default: async ({ cookies, locals }) => {
     const raw = cookies.get(COOKIE_NAME);
     if (raw) {
       const session = unsealSession(raw, sessionSecret());
       if (session?.refreshToken) {
         fetch(`${apiBase()}/auth/logout`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...locals.forwarded },
           body: JSON.stringify({ refreshToken: session.refreshToken }),
         }).catch(() => { /* ignore */ });
       }

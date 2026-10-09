@@ -265,3 +265,32 @@ model SnapshotComment {
   @@index([snapshotId])
   @@map("snapshot_comments")
 }
+
+/// Enterprise audit log (src/ee/audit). Rows are never changed or removed —
+/// a trigger refuses it — and each row's hash covers the previous row's, so
+/// edits made directly in the database are detected (GET /audit-events/verify).
+/// No foreign keys: events outlive the users and projects they mention.
+model AuditEvent {
+  seq         BigInt   @id @default(autoincrement())
+  createdAt   DateTime @map("created_at")
+  action      String
+  actorType   String   @map("actor_type")
+  actorId     String?  @map("actor_id")
+  actorLabel  String?  @map("actor_label")
+  projectId   String?  @map("project_id")
+  projectSlug String?  @map("project_slug")
+  targetType  String?  @map("target_type")
+  targetId    String?  @map("target_id")
+  targetLabel String?  @map("target_label")
+  details     Json     @default("{}")
+  ip          String?
+  userAgent   String?  @map("user_agent")
+  prevHash    String   @map("prev_hash")
+  hash        String
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([projectId])
+  @@index([actorId])
+  @@map("audit_events")
+}

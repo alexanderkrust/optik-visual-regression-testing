@@ -1,0 +1,43 @@
+optik Enterprise License
+
+Copyright (c) 2026 Alexander Rust. All rights reserved.
+
+DRAFT — to be reviewed by a lawyer before the first commercial license is sold.
+
+1. Scope. This license applies to the "Enterprise Code": every file in a
+   directory named "ee" (for example apps/api/src/ee/) and every file whose
+   header refers to this license. All other files of optik are licensed
+   under the Apache License, Version 2.0 (see LICENSE in the repository root).
+
+2. Use. You may use the Enterprise Code in production only while you hold a
+   valid optik license key for an edition that includes the feature in
+   question, within the number of reviewers that license key allows. A
+   license key is valid for optik releases built until the end of its update
+   period, without time limit, unless it is a trial license with an end date.
+
+3. Evaluation and development. Without a license key you may copy, modify and
+   run the Enterprise Code to develop, test and evaluate optik, but not in
+   production and not to provide a service to third parties.
+
+4. Restrictions. You may not (a) remove, change or circumvent the license key
+   verification or any notice about it, (b) sell, sublicense or distribute the
+   Enterprise Code, or modified versions of it, except as part of an
+   unmodified optik release, or (c) offer the Enterprise Code to third parties
+   as a hosted or managed service.
+
+5. Contributions. Changes you send to the Enterprise Code are licensed to the
+   copyright holder under the terms of the Apache License, Version 2.0, so
+   they can be included in optik under this license.
+
+6. Third-party components. Third-party components used by the Enterprise Code
+   are licensed under their own licenses.
+
+7. No warranty. The Enterprise Code is provided "as is", without warranty of
+   any kind, express or implied, including fitness for a particular purpose
+   and non-infringement. To the extent permitted by law, the copyright holder
+   is not liable for any damages arising from its use. Mandatory liability
+   under applicable law (e.g. for intent, gross negligence or injury to life,
+   body or health) remains unaffected.
+
+8. Termination. This license ends automatically if you breach it. Sections 6
+   and 7 survive termination.
