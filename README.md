@@ -375,6 +375,14 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/auth/refresh` | Exchange refresh token for a new access token |
 | POST | `/api/auth/logout` | Revoke refresh token |
 
+### License (admin)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/license` | Edition in effect, license details, reviewer count, problems and warnings |
+| PUT | `/api/license` | Install a license key (`{ "key": "optik1.…" }`) |
+| DELETE | `/api/license` | Remove the license key |
+
 ### Users (JWT required)
 
 | Method | Path | Description |
@@ -453,9 +461,26 @@ Only `DATABASE_URL` is required. Every variable also accepts a `<NAME>_FILE` var
 | `PUBLIC_URL` | URL the adapters use | Public URL of optik for links in commit statuses, notifications and invitation e-mails |
 | `SMTP_URL` | — | SMTP server for e-mail notifications and invitations, e.g. `smtps://user:pass@mail.example.com:465` or `smtp://mail.example.com:587` |
 | `SMTP_FROM` | `optik <optik@localhost>` | Sender of e-mails |
+| `OPTIK_LICENSE` | — | License key (instead of entering it under *License*); `OPTIK_LICENSE_FILE` reads it from a file |
 | `ORIGIN` | derived from request | Public URL, only needed if a reverse proxy doesn't send `X-Forwarded-Proto` / `X-Forwarded-Host` |
 
 Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL of your optik instance — and optionally `OPTIK_BRANCH` / `OPTIK_COMMIT` / `OPTIK_PULL_REQUEST` to override the detected branch, commit and pull request.
+
+---
+
+## Editions and license
+
+optik is open source under the [Apache License 2.0](LICENSE). Without a license key it runs as **Community** edition: all core features, up to 5 reviewers.
+
+| Edition | Reviewers | Adds |
+|---|---|---|
+| Community | 5 | — |
+| Team | as licensed | — |
+| Enterprise | as licensed | SSO, audit log, teams, SCIM, retention policies (in development) |
+
+*Reviewers* are the people who can accept or reject changes: admins, and maintainers and reviewers of any project. Developers who only run tests, and viewers, don't count.
+
+Admins enter the license key under *License* (or set `OPTIK_LICENSE`). The key is a signed file checked **offline** — optik never contacts a license server, also in air-gapped networks. Licenses are perpetual: a key unlocks every optik release built until its *updates until* date, forever; later releases need a renewal. Nothing is ever locked or deleted because of the license — more reviewers than licensed, an expired trial or a too new release only show a notice to admins and fall back to Community.
 
 ---
 
