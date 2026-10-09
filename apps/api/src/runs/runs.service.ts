@@ -4,6 +4,8 @@ import { ProjectsService } from '../projects/projects.service';
 import { CommitStatusService } from '../ci/commit-status.service';
 import { AccessService, CurrentUser } from '../access/access.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { StorageService } from '../storage/storage.service';
+import { diffKey, imageKey } from '../snapshots/storage-keys';
 import type { Run, CreateRunDto } from '@optik/shared';
 import type { Run as PrismaRun, Snapshot as PrismaSnapshot } from '@prisma/client';
 
@@ -37,6 +39,7 @@ export class RunsService {
     private readonly commitStatus: CommitStatusService,
     private readonly access: AccessService,
     private readonly notifications: NotificationsService,
+    private readonly storage: StorageService,
   ) {}
 
   async findByProject(user: CurrentUser, projectSlug: string): Promise<Run[]> {
@@ -119,6 +122,11 @@ export class RunsService {
       const project = await this.prisma.project.findUniqueOrThrow({ where: { id: run.projectId } });
       await this.commitStatus.report({ ...run, project }, 'success', 'No visual changes', target.id);
 
+      // Unchanged snapshots only have images when they differed within their threshold
+      const stored = await this.prisma.snapshot.findMany({
+        where: { runId: id, diffScore: { gt: 0 } },
+        select: { id: true },
+      });
       const [, , merged] = await this.prisma.$transaction([
         this.prisma.snapshot.deleteMany({ where: { runId: id } }),
         this.prisma.run.delete({ where: { id } }),
@@ -128,6 +136,7 @@ export class RunsService {
           include: INCLUDE,
         }),
       ]);
+      await this.storage.delete(stored.flatMap((s) => [imageKey(id, s.id), diffKey(id, s.id)]));
       return toDto(merged);
     }
 

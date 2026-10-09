@@ -6,6 +6,10 @@ import {
   Get,
   Post,
   Patch,
+  Put,
+  Delete,
+  HttpCode,
+  HttpStatus,
   Param,
   Query,
   Body,
@@ -22,7 +26,12 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../database/prisma.service';
 import { AccessService, CurrentUser } from '../access/access.service';
 import { User } from '../access/current-user.decorator';
-import type { UpdateSnapshotStatusDto } from '@optik/shared';
+import { CommentsService } from './comments.service';
+import type {
+  CreateSnapshotCommentDto,
+  SnapshotSettings,
+  UpdateSnapshotStatusDto,
+} from '@optik/shared';
 
 @ApiTags('snapshots')
 @Controller('snapshots')
@@ -33,6 +42,7 @@ export class SnapshotsController {
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
+    private readonly comments: CommentsService,
   ) {}
 
   @Get()
@@ -85,6 +95,46 @@ export class SnapshotsController {
     @Body() dto: UpdateSnapshotStatusDto,
   ) {
     return this.snapshotsService.updateStatus(user, id, dto);
+  }
+
+  @Put(':id/settings')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Set ignore regions and threshold for this snapshot name (reviewer)',
+    description: 'Applies to all later runs of the project and suite, and re-checks open changes.',
+  })
+  updateSettings(@User() user: CurrentUser, @Param('id') id: string, @Body() dto: SnapshotSettings) {
+    return this.snapshotsService.updateSettings(user, id, dto);
+  }
+
+  @Get(':id/comments')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Comments on a snapshot' })
+  listComments(@User() user: CurrentUser, @Param('id') id: string) {
+    return this.comments.list(user, id);
+  }
+
+  @Post(':id/comments')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Comment on a snapshot (reviewer)' })
+  createComment(
+    @User() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: CreateSnapshotCommentDto,
+  ) {
+    return this.comments.create(user, id, dto);
+  }
+
+  @Delete(':id/comments/:commentId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a comment (author or maintainer)' })
+  async deleteComment(
+    @User() user: CurrentUser,
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+  ) {
+    await this.comments.remove(user, id, commentId);
   }
 
   @Get(':id/image')

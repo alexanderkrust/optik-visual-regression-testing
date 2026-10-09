@@ -89,7 +89,8 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [ ] Optional: durable job queue / separate worker nodes, if a single instance's CPUs aren't enough (adapters need the result synchronously today)
 - [x] Notifications: Slack, Microsoft Teams, e-mail (SMTP), generic webhooks (signed) — per project, for "changes to review" and "review done"
 - [ ] Optional: retry failed notification deliveries (today best effort, logged)
-- [ ] Review UI: slider / onion-skin diff, zoom, keyboard shortcuts, comments, ignore regions, per-snapshot thresholds
+- [x] Review UI: slider / onion-skin diff, zoom, keyboard shortcuts, comments, ignore regions, per-snapshot thresholds (open changes are re-checked when they are saved)
+- [ ] Optional: ignore regions from test code (adapter option, e.g. masking locators)
 
 ## Phase 2 — Enterprise (`ee/`)
 
