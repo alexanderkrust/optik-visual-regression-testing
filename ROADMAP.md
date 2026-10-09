@@ -78,7 +78,7 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [ ] GitHub App instead of personal tokens (org-wide install, Checks API with annotations)
 - [x] Separate runs per test suite (e.g. Vitest vs. Playwright in the same project and branch): run merging and baselines per suite
 - [x] Multiple users, instance roles (admin, member), project roles (viewer, reviewer, maintainer), invitation links, review history (who accepted / rejected)
-- [ ] Store refresh tokens hashed (like API tokens)
+- [x] Store refresh tokens hashed (like API tokens)
 - [ ] Send invitations by e-mail (with the SMTP notifications below)
 - [x] Security fixes
   - [x] Image endpoints require authentication (signed, expiring URLs or JWT)

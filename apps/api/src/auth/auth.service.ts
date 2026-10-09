@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../database/prisma.service';
 import { LoginLimiter } from './login-limiter';
@@ -34,10 +34,13 @@ export interface SessionTokens {
   user: { id: string; email: string; role: 'admin' | 'member' };
 }
 
+/** Refresh tokens are 256-bit random values; only their SHA-256 is stored. */
+const hashToken = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
+
 type RefreshTokenRow = {
   id: string;
   userId: string;
-  token: string;
+  tokenHash: string;
   expiresAt: Date;
   createdAt: Date;
 };
@@ -139,7 +142,7 @@ export class AuthService implements OnModuleInit {
   // ------------------------------------------------------------------- refresh
   async refresh(rawToken: string): Promise<{ accessToken: string }> {
     const row = (await (this.prisma as any).refreshToken.findUnique({
-      where: { token: rawToken },
+      where: { tokenHash: hashToken(rawToken ?? '') },
       include: { user: true },
     })) as (RefreshTokenRow & { user: UserRow }) | null;
 
@@ -159,7 +162,7 @@ export class AuthService implements OnModuleInit {
   // -------------------------------------------------------------------- logout
   async logout(rawToken: string): Promise<void> {
     await (this.prisma as any).refreshToken.deleteMany({
-      where: { token: rawToken },
+      where: { tokenHash: hashToken(rawToken ?? '') },
     });
   }
 
@@ -172,10 +175,15 @@ export class AuthService implements OnModuleInit {
     const expiresAt = this.parseExpiry(refreshExpires);
     const rawRefresh = randomBytes(32).toString('hex');
 
+    // Housekeeping: drop the user's expired refresh tokens
+    await (this.prisma as any).refreshToken.deleteMany({
+      where: { userId: user.id, expiresAt: { lt: new Date() } },
+    });
+
     await (this.prisma as any).refreshToken.create({
       data: {
         userId: user.id,
-        token: rawRefresh,
+        tokenHash: hashToken(rawRefresh),
         expiresAt,
       },
     });
