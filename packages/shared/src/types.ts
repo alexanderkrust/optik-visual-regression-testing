@@ -296,3 +296,53 @@ export interface WebhookPayload {
   };
   reviewUrl: string | null;
 }
+
+// ------------------------------------------------------------------ license
+
+/**
+ * - `community`   free, no license key; up to 5 reviewers
+ * - `team`        licensed reviewers
+ * - `enterprise`  + enterprise features (see ENTERPRISE_FEATURES)
+ */
+export type Edition = 'community' | 'team' | 'enterprise';
+
+/** Features of the Enterprise edition (code under `ee/`). */
+export type EnterpriseFeature = 'audit_log' | 'sso' | 'teams' | 'scim' | 'retention';
+
+/** The contents of a signed license key. */
+export interface LicenseDetails {
+  id: string;
+  licensee: string;
+  edition: Exclude<Edition, 'community'>;
+  maxReviewers: number;
+  /** YYYY-MM-DD */
+  issuedAt: string;
+  /** Releases built after this day (YYYY-MM-DD) don't unlock the license */
+  updatesUntil: string;
+  /** Trials only: the license ends after this day (YYYY-MM-DD) */
+  validUntil: string | null;
+}
+
+/** `GET /license` (admins). */
+export interface LicenseInfo {
+  /** The edition in effect — community when the key is missing or can't be used */
+  edition: Edition;
+  /** The installed key's contents, if it could be read */
+  license: LicenseDetails | null;
+  /** Where the key comes from: OPTIK_LICENSE, or entered in the admin UI */
+  source: 'environment' | 'settings' | null;
+  /** Reviewers allowed in the edition in effect */
+  maxReviewers: number;
+  /** People who can accept or reject changes: admins, reviewers and maintainers */
+  reviewers: number;
+  /** Build date of this optik release (YYYY-MM-DD), if known */
+  releaseDate: string | null;
+  /** Why the key doesn't take effect */
+  problems: string[];
+  /** Things to act on that don't change the edition, e.g. too many reviewers */
+  warnings: string[];
+}
+
+export interface UpdateLicenseDto {
+  key: string;
+}

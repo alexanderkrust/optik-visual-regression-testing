@@ -34,6 +34,11 @@ COPY --from=build /out/api ./api
 COPY --from=build /repo/apps/web/build ./web/build
 COPY docker/entrypoint.sh /usr/local/bin/optik-entrypoint
 
+# Set by the release workflow. Licenses unlock releases built within their
+# update period, so the build date is part of the image, not configuration.
+ARG OPTIK_VERSION=dev
+ARG OPTIK_RELEASE_DATE=
+RUN printf '{"version":"%s","date":"%s"}\n' "$OPTIK_VERSION" "$OPTIK_RELEASE_DATE" > /app/release.json
 ENV NODE_ENV=production \
     PORT=3000 \
     STORAGE_DIR=/data \
