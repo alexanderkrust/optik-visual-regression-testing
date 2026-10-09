@@ -34,6 +34,12 @@ services:
       timeout: 5s
       retries: 20
 
+  # Catches all e-mail optik sends (invitations, notifications) — UI on :8025
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - '8025:8025'
+
   api:
     build:
       context: .
@@ -53,6 +59,8 @@ services:
     environment:
       DATABASE_URL: 'postgresql://optik:optik@postgres:5432/optik'
       S3_ENDPOINT: 'http://s3:8333'
+      SMTP_URL: 'smtp://mailpit:1025'
+      SMTP_FROM: 'optik <optik@localhost>'
     depends_on:
       postgres:
         condition: service_healthy

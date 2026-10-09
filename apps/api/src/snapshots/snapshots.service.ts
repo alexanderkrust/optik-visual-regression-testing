@@ -8,7 +8,8 @@ import { AccessService, CurrentUser } from '../access/access.service';
 const WITH_REVIEWER = { reviewedBy: { select: { email: true } } } as const;
 type SnapshotRow = PrismaSnapshot & { reviewedBy?: { email: string } | null };
 import { StorageService } from '../storage/storage.service';
-import { computeDiff, pixelHash } from '@optik/core';
+import { DiffService } from '../diff/diff.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type {
   Snapshot,
   SnapshotStatus,
@@ -34,6 +35,8 @@ export class SnapshotsService {
     private readonly urls: ImageUrlSigner,
     private readonly commitStatus: CommitStatusService,
     private readonly access: AccessService,
+    private readonly diff: DiffService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async findByRun(user: CurrentUser, runId: string): Promise<Snapshot[]> {
@@ -82,13 +85,6 @@ export class SnapshotsService {
       throw new NotFoundException(`Run "${runId}" not found`);
     }
 
-    let imageHash: string;
-    try {
-      imageHash = pixelHash(image);
-    } catch {
-      throw new BadRequestException(`Snapshot "${name}" is not a valid PNG`);
-    }
-
     let baseline = await this.findBaseline(run, name);
 
     // A baseline whose image is gone (e.g. stored before the move to S3) can't be
@@ -100,21 +96,24 @@ export class SnapshotsService {
       : null;
     if (!baselineImage) baseline = null;
 
+    // Decoding, hashing and diffing run in a worker thread (see DiffService)
+    let analysis: Awaited<ReturnType<DiffService['analyse']>>;
+    try {
+      analysis = await this.diff.analyse({ image, baseline: baselineImage });
+    } catch {
+      throw new BadRequestException(`Snapshot "${name}" is not a valid PNG`);
+    }
+    const { imageHash } = analysis;
+
     let status: SnapshotStatus = 'new';
     let diffScore: number | null = null;
     let diffImage: Buffer | null = null;
 
-    if (baseline && baselineImage) {
-      let result: ReturnType<typeof computeDiff>;
-      try {
-        result = computeDiff(baselineImage, image);
-      } catch {
-        throw new BadRequestException(`Snapshot "${name}" is not a valid PNG`);
-      }
-      const changed = result.diffCount > 0 || result.sizeChanged;
+    if (analysis.diff) {
+      const changed = analysis.diff.diffCount > 0 || analysis.diff.sizeChanged;
       status = changed ? 'pending' : 'unchanged';
-      diffScore = result.diffScore;
-      if (changed) diffImage = result.diffBuffer;
+      diffScore = analysis.diff.diffScore;
+      if (changed) diffImage = Buffer.from(analysis.diff.diffImage);
     }
 
     // E.g. after a squash merge: the change was reviewed on its branch, but the
@@ -229,6 +228,11 @@ export class SnapshotsService {
     });
     // Accepting the last change turns the pull request's check green
     await this.commitStatus.reportRun(row.runId);
+    // … and tells the team the review is done
+    if (snapshot.status === 'pending') {
+      const open = await this.prisma.snapshot.count({ where: { runId: row.runId, status: 'pending' } });
+      if (open === 0) await this.notifications.notifyRun(row.runId, 'run.reviewed');
+    }
     return this.toDto(row);
   }
 

@@ -78,15 +78,17 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [ ] GitHub App instead of personal tokens (org-wide install, Checks API with annotations)
 - [x] Separate runs per test suite (e.g. Vitest vs. Playwright in the same project and branch): run merging and baselines per suite
 - [x] Multiple users, instance roles (admin, member), project roles (viewer, reviewer, maintainer), invitation links, review history (who accepted / rejected)
-- [ ] Store refresh tokens hashed (like API tokens)
-- [ ] Send invitations by e-mail (with the SMTP notifications below)
+- [x] Store refresh tokens hashed (like API tokens)
+- [x] Send invitations by e-mail (with the SMTP notifications below)
 - [x] Security fixes
   - [x] Image endpoints require authentication (signed, expiring URLs or JWT)
   - [x] API tokens stored hashed, not in plain text
   - [x] Rate limiting of failed sign-ins (per account)
   - [x] Security headers (CSP, HSTS, …)
-- [ ] Diffing as background jobs (queue in Postgres, e.g. pg-boss — no extra Redis)
-- [ ] Notifications: Slack, Microsoft Teams, e-mail (SMTP), generic webhooks
+- [x] Diffing off the main thread: worker thread pool (`DIFF_WORKERS`) — the API stays responsive and diffs run in parallel (8 large diffs: 16.2 s → 3.7 s, API blocked up to 5 s → 44 ms)
+- [ ] Optional: durable job queue / separate worker nodes, if a single instance's CPUs aren't enough (adapters need the result synchronously today)
+- [x] Notifications: Slack, Microsoft Teams, e-mail (SMTP), generic webhooks (signed) — per project, for "changes to review" and "review done"
+- [ ] Optional: retry failed notification deliveries (today best effort, logged)
 - [ ] Review UI: slider / onion-skin diff, zoom, keyboard shortcuts, comments, ignore regions, per-snapshot thresholds
 
 ## Phase 2 — Enterprise (`ee/`)

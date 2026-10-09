@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
 import { SecretBox } from '../common/secret-box';
+import { publicUrl } from '../common/public-url';
 
 export type CommitState = 'pending' | 'success' | 'failure';
 
@@ -82,7 +83,7 @@ export class CommitStatusService {
     }
 
     const apiUrl = (target.project.githubApiUrl || 'https://api.github.com').replace(/\/+$/, '');
-    const publicUrl = (this.config.get<string>('PUBLIC_URL') || target.serverUrl || '').replace(/\/+$/, '');
+    const baseUrl = publicUrl(this.config, target.serverUrl);
 
     try {
       const res = await fetch(`${apiUrl}/repos/${githubRepo}/statuses/${target.commitSha}`, {
@@ -97,7 +98,7 @@ export class CommitStatusService {
           state,
           description,
           context: target.suite === 'default' ? 'optik' : `optik/${target.suite}`,
-          ...(publicUrl ? { target_url: `${publicUrl}/${target.project.slug}/${linkRunId}` } : {}),
+          ...(baseUrl ? { target_url: `${baseUrl}/${target.project.slug}/${linkRunId}` } : {}),
         }),
         signal: AbortSignal.timeout(10_000),
       });
