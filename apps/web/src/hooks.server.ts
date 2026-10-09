@@ -44,9 +44,30 @@ async function tryRefresh(
   }
 }
 
+/**
+ * The web UI calls the API from the server, so the API would only see this
+ * server's address. Pass on the client's, and its browser, for the audit log.
+ */
+function forwardedHeaders(event: Parameters<Handle>[0]['event']): Record<string, string> {
+  const headers: Record<string, string> = {};
+  let client = event.request.headers.get('x-forwarded-for');
+  if (!client) {
+    try {
+      client = event.getClientAddress();
+    } catch {
+      client = null;
+    }
+  }
+  if (client) headers['X-Forwarded-For'] = client;
+  const userAgent = event.request.headers.get('user-agent');
+  if (userAgent) headers['User-Agent'] = userAgent;
+  return headers;
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
   event.locals.user = null;
   event.locals.accessToken = null;
+  event.locals.forwarded = forwardedHeaders(event);
 
   const raw = event.cookies.get(COOKIE_NAME);
   if (raw) {

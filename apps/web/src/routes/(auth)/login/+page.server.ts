@@ -5,7 +5,7 @@ import { COOKIE_NAME, cookieOptions, sessionSecret } from '$lib/server/session-c
 import type { Actions } from './$types';
 
 export const actions: Actions = {
-  default: async ({ request, cookies, url }) => {
+  default: async ({ request, cookies, url, locals }) => {
     const data = await request.formData();
     const email = (data.get('email') as string | null)?.trim() ?? '';
     const password = (data.get('password') as string | null) ?? '';
@@ -17,7 +17,7 @@ export const actions: Actions = {
     try {
       const res = await fetch(`${apiBase()}/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...locals.forwarded },
         body: JSON.stringify({ email, password }),
       });
 

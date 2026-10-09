@@ -1,4 +1,6 @@
 optik
 Copyright 2026 Alexander Rust
 
-Licensed under the Apache License, Version 2.0 (see LICENSE).
+Licensed under the Apache License, Version 2.0 (see LICENSE), except for
+files in directories named "ee" and files whose header says so, which are
+licensed under the optik Enterprise License (see ee/LICENSE).

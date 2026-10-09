@@ -20,7 +20,8 @@ export async function startApp(
   configure: (builder: TestingModuleBuilder) => TestingModuleBuilder = (b) => b,
 ): Promise<TestApp> {
   const moduleRef = await configure(Test.createTestingModule({ imports: [AppModule] })).compile();
-  const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+  // Same as main.ts: X-Forwarded-* from a reverse proxy are honoured
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter({ trustProxy: true }));
   await configureApp(app);
   await app.listen(0, '127.0.0.1');
   const address = app.getHttpServer().address() as { port: number };
@@ -34,7 +35,7 @@ export async function startApp(
 /** Removes all data — called before each test. */
 export async function resetDatabase(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE snapshots, runs, api_tokens, projects, refresh_tokens, users, instance_settings CASCADE',
+    'TRUNCATE snapshots, runs, api_tokens, projects, refresh_tokens, users, instance_settings, audit_events CASCADE',
   );
 }
 
@@ -58,9 +59,9 @@ export interface Res<T = any> {
 
 export async function call<T = any>(
   url: string,
-  init: { method?: string; token?: string; json?: unknown; form?: FormData } = {},
+  init: { method?: string; token?: string; json?: unknown; form?: FormData; headers?: Record<string, string> } = {},
 ): Promise<Res<T>> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...init.headers };
   if (init.token) headers.Authorization = `Bearer ${init.token}`;
   if (init.json !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(url, {

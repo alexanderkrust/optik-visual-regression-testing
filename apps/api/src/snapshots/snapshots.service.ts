@@ -17,6 +17,7 @@ import { StorageService } from '../storage/storage.service';
 import { diffKey, imageKey } from './storage-keys';
 import { DiffService } from '../diff/diff.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditTrail } from '../audit/audit-trail';
 import type {
   IgnoreRegion,
   Snapshot,
@@ -49,6 +50,7 @@ export class SnapshotsService {
     private readonly access: AccessService,
     private readonly diff: DiffService,
     private readonly notifications: NotificationsService,
+    private readonly audit: AuditTrail,
   ) {}
 
   async findByRun(user: CurrentUser, runId: string): Promise<Snapshot[]> {
@@ -235,7 +237,7 @@ export class SnapshotsService {
 
   /** Approve or reject a visual change. Only snapshots that differ from their baseline can be reviewed. */
   async updateStatus(user: CurrentUser, id: string, dto: UpdateSnapshotStatusDto): Promise<Snapshot> {
-    await this.access.requireSnapshot(user, id, 'reviewer');
+    const { project } = await this.access.requireSnapshot(user, id, 'reviewer');
     if (dto?.status !== 'approved' && dto?.status !== 'rejected') {
       throw new BadRequestException('status must be "approved" or "rejected"');
     }
@@ -248,7 +250,20 @@ export class SnapshotsService {
     const row = await this.prisma.snapshot.update({
       where: { id },
       data: { status: dto.status, reviewedById: user.id, reviewedAt: new Date() },
-      include: WITH_REVIEWER,
+      include: { ...WITH_REVIEWER, run: { select: { branch: true, suite: true, commitSha: true } } },
+    });
+    await this.audit.record({
+      action: dto.status === 'approved' ? 'snapshot.approved' : 'snapshot.rejected',
+      project: { id: project.id, slug: project.slug },
+      target: { type: 'snapshot', id, label: row.name },
+      details: {
+        runId: row.runId,
+        branch: row.run.branch,
+        suite: row.run.suite,
+        commit: row.run.commitSha,
+        previousStatus: snapshot.status,
+        diffScore: row.diffScore,
+      },
     });
     // Accepting the last change turns the pull request's check green
     await this.commitStatus.reportRun(row.runId);
@@ -270,7 +285,7 @@ export class SnapshotsService {
    * they are; the settings apply to them from the next run on.
    */
   async updateSettings(user: CurrentUser, id: string, dto: SnapshotSettings): Promise<Snapshot> {
-    await this.access.requireSnapshot(user, id, 'reviewer');
+    const { project } = await this.access.requireSnapshot(user, id, 'reviewer');
     const settings = validateSettings(dto);
     const snapshot = await this.prisma.snapshot.findUniqueOrThrow({
       where: { id },
@@ -289,6 +304,12 @@ export class SnapshotsService {
       select: { id: true, runId: true, baselineId: true },
     });
     for (const change of open) await this.reevaluate(change, settings);
+    await this.audit.record({
+      action: 'snapshot.settings_updated',
+      project: { id: project.id, slug: project.slug },
+      target: { type: 'snapshot', id, label: name },
+      details: { suite, ignoreRegions: settings.ignoreRegions.length, threshold: settings.threshold },
+    });
 
     const row = await this.prisma.snapshot.findUniqueOrThrow({ where: { id }, include: WITH_REVIEWER });
     return this.toDto(row, settings);

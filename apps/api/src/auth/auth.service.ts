@@ -14,6 +14,7 @@ import { createHash, randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../database/prisma.service';
 import { LoginLimiter } from './login-limiter';
+import { AuditTrail } from '../audit/audit-trail';
 
 // Compared against when the email is unknown, so the response time doesn't
 // reveal which accounts exist.
@@ -54,6 +55,7 @@ export class AuthService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly audit: AuditTrail,
   ) {
     this.loginLimiter = new LoginLimiter(
       Number(config.get('LOGIN_MAX_FAILURES') ?? 10),
@@ -104,6 +106,11 @@ export class AuthService implements OnModuleInit {
       return tx.user.create({ data: { email, password: hash, role: 'admin' } });
     })) as UserRow;
 
+    await this.audit.record({
+      action: 'auth.setup',
+      actor: { type: 'user', id: user.id, label: user.email },
+      target: { type: 'user', id: user.id, label: user.email },
+    });
     return this.issueTokens(user);
   }
 
@@ -115,6 +122,7 @@ export class AuthService implements OnModuleInit {
     email = email?.trim() ?? '';
     const retryAfter = this.loginLimiter.retryAfter(email);
     if (retryAfter > 0) {
+      await this.loginFailed(email, 'blocked');
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
@@ -132,11 +140,25 @@ export class AuthService implements OnModuleInit {
     const valid = await bcrypt.compare(password ?? '', user?.password ?? DUMMY_HASH);
     if (!user || !valid) {
       this.loginLimiter.recordFailure(email);
+      await this.loginFailed(email, user ? 'wrong_password' : 'unknown_user');
       throw new UnauthorizedException('Invalid credentials');
     }
 
     this.loginLimiter.reset(email);
+    await this.audit.record({
+      action: 'auth.login',
+      actor: { type: 'user', id: user.id, label: user.email },
+      target: { type: 'user', id: user.id, label: user.email },
+    });
     return this.issueTokens(user);
+  }
+
+  private loginFailed(email: string, reason: 'wrong_password' | 'unknown_user' | 'blocked') {
+    return this.audit.record({
+      action: 'auth.login_failed',
+      actor: { type: 'anonymous', id: null, label: email.slice(0, 254) || null },
+      details: { reason },
+    });
   }
 
   // ------------------------------------------------------------------- refresh

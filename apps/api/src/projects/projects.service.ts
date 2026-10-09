@@ -16,6 +16,7 @@ import type {
 } from '@optik/shared';
 import { AccessService, CurrentUser } from '../access/access.service';
 import { CI_PROVIDERS, checkRepository, PROVIDERS } from '../ci/providers';
+import { AuditTrail } from '../audit/audit-trail';
 
 export interface SetProjectMemberDto {
   email: string;
@@ -96,6 +97,7 @@ export class ProjectsService {
     private readonly prisma: PrismaService,
     private readonly secrets: SecretBox,
     private readonly access: AccessService,
+    private readonly audit: AuditTrail,
   ) {}
 
   async findAll(user: CurrentUser): Promise<Project[]> {
@@ -132,6 +134,15 @@ export class ProjectsService {
         ...ciSettings(project, dto ?? {}, (token) => this.secrets.encrypt(token)),
       },
     });
+    const changes = settingChanges(project, row);
+    if (Object.keys(changes).length > 0) {
+      await this.audit.record({
+        action: 'project.updated',
+        project: { id: row.id, slug: row.slug },
+        target: { type: 'project', id: row.id, label: row.name },
+        details: { changes },
+      });
+    }
     return toDto(row, role);
   }
 
@@ -140,6 +151,11 @@ export class ProjectsService {
     try {
       const row = await this.prisma.project.create({
         data: { name: dto.name, slug: dto.slug, defaultBranch: branchName(dto.defaultBranch) },
+      });
+      await this.audit.record({
+        action: 'project.created',
+        project: { id: row.id, slug: row.slug },
+        target: { type: 'project', id: row.id, label: row.name },
       });
       return toDto(row, 'admin');
     } catch (e: any) {
@@ -172,18 +188,54 @@ export class ProjectsService {
     if (!member) {
       throw new NotFoundException(`No user with the email "${dto?.email}" — invite them first`);
     }
+    const previous = await this.prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId: project.id, userId: member.id } },
+      select: { role: true },
+    });
     await this.prisma.projectMember.upsert({
       where: { projectId_userId: { projectId: project.id, userId: member.id } },
       create: { projectId: project.id, userId: member.id, role },
       update: { role },
     });
+    if (previous?.role !== role) {
+      await this.audit.record({
+        action: previous ? 'member.role_changed' : 'member.added',
+        project: { id: project.id, slug: project.slug },
+        target: { type: 'user', id: member.id, label: member.email },
+        details: previous ? { from: previous.role, to: role } : { role },
+      });
+    }
     return { userId: member.id, email: member.email, role };
   }
 
   async removeMember(user: CurrentUser, slug: string, userId: string): Promise<void> {
     const { project } = await this.access.requireProject(user, { slug }, 'maintainer');
+    const member = await this.prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId: project.id, userId } },
+      select: { role: true, user: { select: { email: true } } },
+    });
     await this.prisma.projectMember.deleteMany({ where: { projectId: project.id, userId } });
+    if (member) {
+      await this.audit.record({
+        action: 'member.removed',
+        project: { id: project.id, slug: project.slug },
+        target: { type: 'user', id: userId, label: member.user.email },
+        details: { role: member.role },
+      });
+    }
   }
+}
+
+/** Changed settings for the audit log — the CI token only as "set" or "removed". */
+function settingChanges(before: ProjectRow, after: ProjectRow) {
+  const changes: Record<string, unknown> = {};
+  for (const key of ['defaultBranch', 'failTestsOnChanges', 'ciProvider', 'ciRepository', 'ciApiUrl'] as const) {
+    if (before[key] !== after[key]) changes[key] = { from: before[key], to: after[key] };
+  }
+  if (before.ciTokenEncrypted !== after.ciTokenEncrypted) {
+    changes.ciToken = after.ciTokenEncrypted ? 'set' : 'removed';
+  }
+  return changes;
 }
 
 const PROJECT_ROLES: ProjectRole[] = ['viewer', 'reviewer', 'maintainer'];
