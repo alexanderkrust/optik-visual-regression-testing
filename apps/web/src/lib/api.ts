@@ -13,6 +13,8 @@ import type {
   ProjectRole,
   Run,
   Snapshot,
+  SnapshotComment,
+  SnapshotSettings,
   UpdateProjectDto,
   UpdateSnapshotStatusDto,
   User,
@@ -121,6 +123,19 @@ export function createApi(accessToken?: string, baseUrl = BROWSER_BASE_URL) {
           method: 'PATCH',
           body: JSON.stringify({ status: 'rejected' } satisfies UpdateSnapshotStatusDto),
         }),
+      updateSettings: (id: string, settings: SnapshotSettings) =>
+        request<Snapshot>(`/snapshots/${id}/settings`, {
+          method: 'PUT',
+          body: JSON.stringify(settings),
+        }),
+      comments: (id: string) => request<SnapshotComment[]>(`/snapshots/${id}/comments`),
+      comment: (id: string, body: string) =>
+        request<SnapshotComment>(`/snapshots/${id}/comments`, {
+          method: 'POST',
+          body: JSON.stringify({ body }),
+        }),
+      deleteComment: (id: string, commentId: string) =>
+        request<void>(`/snapshots/${id}/comments/${commentId}`, { method: 'DELETE' }),
     },
   };
 }
