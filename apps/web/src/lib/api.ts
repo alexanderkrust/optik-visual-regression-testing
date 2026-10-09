@@ -1,4 +1,4 @@
-import type { Project, Run, Snapshot, UpdateSnapshotStatusDto, ApiToken, CreateApiTokenDto, CreatedApiTokenDto } from '@optik/shared';
+import type { Project, Run, Snapshot, UpdateSnapshotStatusDto, UpdateProjectDto, ApiToken, CreateApiTokenDto, CreatedApiTokenDto } from '@optik/shared';
 
 /** The API is served under /api on the same origin as the web UI. */
 const BROWSER_BASE_URL = '/api';
@@ -29,6 +29,9 @@ export function createApi(accessToken?: string, baseUrl = BROWSER_BASE_URL) {
       list: () => request<Project[]>('/projects'),
       create: (body: { name: string; slug: string }) =>
         request<Project>('/projects', { method: 'POST', body: JSON.stringify(body) }),
+      get: (slug: string) => request<Project>(`/projects/${slug}`),
+      update: (slug: string, body: UpdateProjectDto) =>
+        request<Project>(`/projects/${slug}`, { method: 'PATCH', body: JSON.stringify(body) }),
     },
     tokens: {
       list: (projectSlug: string) => request<ApiToken[]>(`/projects/${projectSlug}/tokens`),

@@ -71,7 +71,8 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 
 *Goal: multiple teams use optik in their daily workflow.*
 
-- [ ] **Baselines per branch** based on git ancestry: accepting a change on a feature branch must not affect `main` until merged (adapters send the merge-base commit)
+- [x] **Baselines per branch** based on git ancestry: accepting a change on a feature branch doesn't affect `main` until merged; squash/rebase merges are recognised by pixel-identical approved images
+- [ ] Project setting to require a manual review even for pixel-identical approved images (four-eyes principle)
 - [ ] **CI platform integration** (GitHub, GitLab, Bitbucket, Azure DevOps): commit status / check with review link, turns green after approval without re-running CI; "fail the test" stays available as an option
 - [x] Separate runs per test suite (e.g. Vitest vs. Playwright in the same project and branch): run merging and baselines per suite
 - [ ] Multiple users, roles (Admin, Reviewer, Developer/Viewer), per-project permissions, teams, invitations

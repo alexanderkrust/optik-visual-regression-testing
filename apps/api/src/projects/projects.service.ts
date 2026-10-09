@@ -1,12 +1,23 @@
 import {
+  BadRequestException,
   Injectable,
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import type { Project, CreateProjectDto } from '@optik/shared';
+import type { Project, CreateProjectDto, UpdateProjectDto } from '@optik/shared';
+import type { Project as ProjectRow } from '@prisma/client';
 
-type ProjectRow = { id: string; name: string; slug: string; createdAt: Date };
+const BRANCH_PATTERN = /^[^\s~^:?*[\\]{1,255}$/;
+
+function branchName(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const branch = value.trim();
+  if (!BRANCH_PATTERN.test(branch)) {
+    throw new BadRequestException('defaultBranch must be a valid git branch name');
+  }
+  return branch;
+}
 
 @Injectable()
 export class ProjectsService {
@@ -25,10 +36,19 @@ export class ProjectsService {
     return toDto(row);
   }
 
+  async update(slug: string, dto: UpdateProjectDto): Promise<Project> {
+    await this.findBySlug(slug);
+    const row = await this.prisma.project.update({
+      where: { slug },
+      data: { defaultBranch: branchName(dto?.defaultBranch) },
+    });
+    return toDto(row);
+  }
+
   async create(dto: CreateProjectDto): Promise<Project> {
     try {
       const row = await this.prisma.project.create({
-        data: { name: dto.name, slug: dto.slug },
+        data: { name: dto.name, slug: dto.slug, defaultBranch: branchName(dto.defaultBranch) },
       });
       return toDto(row);
     } catch (e: any) {
@@ -44,6 +64,7 @@ function toDto(r: ProjectRow): Project {
     id: r.id,
     name: r.name,
     slug: r.slug,
+    defaultBranch: r.defaultBranch,
     createdAt: r.createdAt.toISOString(),
   };
 }
