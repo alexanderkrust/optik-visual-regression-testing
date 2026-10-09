@@ -45,6 +45,7 @@ async function createRun(): Promise<SharedRun> {
     body: JSON.stringify({
       branch: getCurrentBranch(),
       commitSha: getCurrentCommit(),
+      suite: process.env._OPTIK_SUITE,
     }),
   })
 

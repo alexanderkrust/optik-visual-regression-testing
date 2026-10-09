@@ -48,6 +48,60 @@ describe('runs', () => {
     });
   });
 
+  describe('suites', () => {
+    const run = (suite: string | undefined, image: Buffer, branch = 'main') =>
+      adapter.fullRun({ Button: image }, branch, 'abc1234', suite);
+
+    it('puts runs without a suite into "default"', async () => {
+      expect((await adapter.startRun()).body.suite).toBe('default');
+      expect((await adapter.startRun('main', 'abc', ' vitest ')).body.suite).toBe('vitest');
+    });
+
+    it('rejects invalid suite names', async () => {
+      for (const suite of ['has space', 'x'.repeat(65), 'ümlaut']) {
+        expect((await adapter.startRun('main', 'abc', suite)).status).toBe(400);
+      }
+    });
+
+    it('merges runs only within the same suite', async () => {
+      const vitest = await run('vitest', WHITE);
+      const playwright = await run('playwright', WHITE);
+      expect(playwright.completed.id).toBe(playwright.runId);
+
+      const vitestAgain = await run('vitest', WHITE);
+      expect(vitestAgain.snapshots.Button.status).toBe('unchanged');
+      expect(vitestAgain.completed).toMatchObject({ id: vitest.runId, runCount: 2 });
+    });
+
+    it('keeps baselines per suite, even for equal snapshot names', async () => {
+      await run('components', WHITE);
+      const pages = await run('pages', BLACK);
+      expect(pages.snapshots.Button.status).toBe('new');
+
+      expect((await run('components', WHITE)).snapshots.Button.status).toBe('unchanged');
+      expect((await run('pages', BLACK)).snapshots.Button.status).toBe('unchanged');
+    });
+
+    it('falls back to "default" baselines, so reviews from before suites carry over', async () => {
+      const legacy = (await run(undefined, WHITE)).snapshots.Button;
+
+      const same = (await run('vitest', WHITE)).snapshots.Button;
+      expect(same).toMatchObject({ status: 'unchanged', baselineId: legacy.id });
+
+      // A change is still detected against the old baseline …
+      const changed = (await run('vitest', BLACK)).snapshots.Button;
+      expect(changed).toMatchObject({ status: 'pending', baselineId: legacy.id });
+
+      // … and once accepted, the suite's own baseline wins
+      await admin.review(changed.id, 'approved');
+      expect((await run('vitest', BLACK)).snapshots.Button).toMatchObject({
+        status: 'unchanged',
+        baselineId: changed.id,
+      });
+      expect((await run(undefined, WHITE)).snapshots.Button.status).toBe('unchanged');
+    });
+  });
+
   describe('merging runs without visual changes', () => {
     it('merges a clean run into the previous clean run of the branch', async () => {
       const first = await adapter.fullRun({ Button: WHITE }, 'main', 'commit1');

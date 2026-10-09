@@ -198,6 +198,7 @@
           <TableHeader>
             <TableRow>
               <TableHead>Branch</TableHead>
+              <TableHead>Suite</TableHead>
               <TableHead>Commit</TableHead>
               <TableHead class="text-center">Snapshots</TableHead>
               <TableHead class="text-center">Changes</TableHead>
@@ -216,6 +217,9 @@
                     <GitBranch class="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     {run.branch}
                   </span>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" class="font-mono text-xs">{run.suite}</Badge>
                 </TableCell>
                 <TableCell>
                   <span class="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">

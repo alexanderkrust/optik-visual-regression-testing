@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ProjectsService } from '../projects/projects.service';
 import type { Run, CreateRunDto } from '@optik/shared';
@@ -6,6 +6,11 @@ import type { Run as PrismaRun, Snapshot as PrismaSnapshot } from '@prisma/clien
 
 /** Snapshot statuses that mean the run had a visual change. */
 const CHANGE_STATUSES = ['pending', 'approved', 'rejected'];
+
+/** Suite of runs created before suites existed — other suites fall back to its baselines. */
+export const DEFAULT_SUITE = 'default';
+
+const SUITE_PATTERN = /^[A-Za-z0-9._/-]{1,64}$/;
 
 const INCLUDE = {
   project: { select: { slug: true } },
@@ -47,8 +52,14 @@ export class RunsService {
 
   async create(projectSlug: string, dto: CreateRunDto): Promise<Run> {
     const project = await this.projectsService.findBySlug(projectSlug);
+    const suite = dto.suite?.trim() || DEFAULT_SUITE;
+    if (!SUITE_PATTERN.test(suite)) {
+      throw new BadRequestException(
+        'suite must be 1–64 characters: letters, digits, ".", "_", "/" or "-"',
+      );
+    }
     const row = await this.prisma.run.create({
-      data: { projectId: project.id, branch: dto.branch, commitSha: dto.commitSha },
+      data: { projectId: project.id, branch: dto.branch, commitSha: dto.commitSha, suite },
       include: INCLUDE,
     });
     return toDto(row);
@@ -56,7 +67,7 @@ export class RunsService {
 
   /**
    * Marks a run complete. A run whose snapshots are all `unchanged` is merged
-   * into the previous run of the same branch if that one had no visual changes
+   * into the previous run of the same suite and branch if that one had no visual changes
    * either: the new run is deleted and the previous one gets a bumped
    * `updatedAt`, `runCount` and `lastCommitSha`. Returns the run that remains.
    */
@@ -97,6 +108,7 @@ export class RunsService {
     const previous = await this.prisma.run.findFirst({
       where: {
         projectId: run.projectId,
+        suite: run.suite,
         branch: run.branch,
         createdAt: { lt: run.createdAt },
       },
@@ -117,6 +129,7 @@ function toDto(r: RunWithCounts): Run {
     projectId: r.projectId,
     projectSlug: r.project.slug,
     branch: r.branch,
+    suite: r.suite,
     commitSha: r.commitSha,
     lastCommitSha: r.lastCommitSha,
     status: r.status as Run['status'],

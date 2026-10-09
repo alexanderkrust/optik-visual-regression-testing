@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ImageUrlSigner } from './image-urls';
+import { DEFAULT_SUITE } from '../runs/runs.service';
 import { StorageService } from '../storage/storage.service';
 import { computeDiff } from '@optik/core';
 import type {
@@ -41,7 +42,7 @@ export class SnapshotsService {
 
   /**
    * Stores a screenshot and compares it with the current baseline — the latest
-   * `new` or `approved` snapshot of the same name in the project.
+   * `new` or `approved` snapshot of the same name in the run's suite (see findBaseline).
    *
    * - no baseline        → `new` (becomes the baseline)
    * - identical          → `unchanged` (image not stored — it equals the baseline)
@@ -55,22 +56,14 @@ export class SnapshotsService {
   ): Promise<SubmittedSnapshot> {
     const run = await this.prisma.run.findUnique({
       where: { id: runId },
-      select: { id: true, projectId: true, project: { select: { slug: true } } },
+      select: { id: true, projectId: true, suite: true, project: { select: { slug: true } } },
     });
     // A token may only write to runs of its own project; don't reveal others
     if (!run || run.projectId !== projectId) {
       throw new NotFoundException(`Run "${runId}" not found`);
     }
 
-    let baseline = await this.prisma.snapshot.findFirst({
-      where: {
-        name,
-        status: { in: BASELINE_STATUSES },
-        run: { projectId: run.projectId },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, runId: true },
-    });
+    let baseline = await this.findBaseline(run.projectId, run.suite, name);
 
     // A baseline whose image is gone (e.g. stored before the move to S3) can't be
     // compared against — treat the snapshot as new so it becomes the baseline.
@@ -109,6 +102,27 @@ export class SnapshotsService {
       ...this.toDto(snapshot),
       reviewPath: `/${run.project.slug}/${runId}?snapshot=${snapshot.id}`,
     };
+  }
+
+  /**
+   * Latest accepted snapshot of this name in the suite. Runs from before suites
+   * existed belong to the "default" suite; other suites fall back to it so
+   * existing baselines (and their reviews) carry over.
+   */
+  private async findBaseline(projectId: string, suite: string, name: string) {
+    for (const s of suite === DEFAULT_SUITE ? [suite] : [suite, DEFAULT_SUITE]) {
+      const baseline = await this.prisma.snapshot.findFirst({
+        where: {
+          name,
+          status: { in: BASELINE_STATUSES },
+          run: { projectId, suite: s },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, runId: true },
+      });
+      if (baseline) return baseline;
+    }
+    return null;
   }
 
   /** Approve or reject a visual change. Only snapshots that differ from their baseline can be reviewed. */
