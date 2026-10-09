@@ -7,6 +7,7 @@ import { StorageModule } from './storage/storage.module';
 import { CiModule } from './ci/ci.module';
 import { AccessModule } from './access/access.module';
 import { UsersModule } from './users/users.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { ProjectsModule } from './projects/projects.module';
 import { RunsModule } from './runs/runs.module';
 import { SnapshotsModule } from './snapshots/snapshots.module';
@@ -32,6 +33,7 @@ import { AuthModule } from './auth/auth.module';
     TokensModule,
     AuthModule,
     UsersModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
 })
