@@ -41,16 +41,26 @@ export const actions: Actions = {
   updateSettings: async (event) => {
     const api = serverApi(event.locals);
     const data = await event.request.formData();
-    const defaultBranch = (data.get('defaultBranch') as string | null)?.trim() ?? '';
+    const field = (name: string) => ((data.get(name) as string | null) ?? '').trim();
+    const defaultBranch = field('defaultBranch');
     if (!defaultBranch) return fail(400, { settingsError: 'The default branch is required' });
 
     try {
-      await api.projects.update(event.params.project, { defaultBranch });
+      await api.projects.update(event.params.project, {
+        defaultBranch,
+        failTestsOnChanges: data.get('failTestsOnChanges') === 'on',
+        githubRepo: field('githubRepo'),
+        githubApiUrl: field('githubApiUrl'),
+        // Empty keeps the stored token; it is never sent back to the browser
+        ...(field('githubToken') ? { githubToken: field('githubToken') } : {}),
+      });
       return { settingsSaved: true };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.startsWith('400')) {
-        return fail(400, { settingsError: 'That is not a valid git branch name' });
+        return fail(400, {
+          settingsError: 'Check the values: branch name, repository as "owner/repo", API URL as http(s) URL',
+        });
       }
       return fail(500, { settingsError: `Failed to save: ${msg}` });
     }
