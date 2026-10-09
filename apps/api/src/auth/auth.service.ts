@@ -24,8 +24,15 @@ type UserRow = {
   id: string;
   email: string;
   password: string;
+  role: 'admin' | 'member';
   createdAt: Date;
 };
+
+export interface SessionTokens {
+  accessToken: string;
+  refreshToken: string;
+  user: { id: string; email: string; role: 'admin' | 'member' };
+}
 
 type RefreshTokenRow = {
   id: string;
@@ -61,7 +68,7 @@ export class AuthService implements OnModuleInit {
     if (count > 0) return;
 
     const hash = await bcrypt.hash(password, 10);
-    await (this.prisma as any).user.create({ data: { email, password: hash } });
+    await (this.prisma as any).user.create({ data: { email, password: hash, role: 'admin' } });
     this.logger.log(`Initial admin user created: ${email}`);
   }
 
@@ -74,11 +81,7 @@ export class AuthService implements OnModuleInit {
   async register(
     email: string,
     password: string,
-  ): Promise<{
-    accessToken: string;
-    refreshToken: string;
-    user: { id: string; email: string };
-  }> {
+  ): Promise<SessionTokens> {
     email = email?.trim() ?? '';
     if (!/^[^\s@]+@[^\s@]+$/.test(email)) {
       throw new BadRequestException('A valid email address is required');
@@ -94,7 +97,8 @@ export class AuthService implements OnModuleInit {
       if ((await tx.user.count()) > 0) {
         throw new ForbiddenException('Initial setup already complete');
       }
-      return tx.user.create({ data: { email, password: hash } });
+      // The first user administers the instance
+      return tx.user.create({ data: { email, password: hash, role: 'admin' } });
     })) as UserRow;
 
     return this.issueTokens(user);
@@ -104,11 +108,7 @@ export class AuthService implements OnModuleInit {
   async login(
     email: string,
     password: string,
-  ): Promise<{
-    accessToken: string;
-    refreshToken: string;
-    user: { id: string; email: string };
-  }> {
+  ): Promise<SessionTokens> {
     email = email?.trim() ?? '';
     const retryAfter = this.loginLimiter.retryAfter(email);
     if (retryAfter > 0) {
@@ -164,7 +164,8 @@ export class AuthService implements OnModuleInit {
   }
 
   // ------------------------------------------------------------------ helpers
-  private async issueTokens(user: UserRow) {
+  /** Signs the user in: a short-lived access token and a refresh token. */
+  async issueTokens(user: UserRow): Promise<SessionTokens> {
     const accessToken = this.signAccess(user);
 
     const refreshExpires = this.config.get<string>('JWT_REFRESH_EXPIRES', '7d');
@@ -182,7 +183,7 @@ export class AuthService implements OnModuleInit {
     return {
       accessToken,
       refreshToken: rawRefresh,
-      user: { id: user.id, email: user.email },
+      user: { id: user.id, email: user.email, role: user.role },
     };
   }
 

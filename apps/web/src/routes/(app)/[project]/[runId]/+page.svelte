@@ -131,7 +131,7 @@
       </p>
     {/if}
   </div>
-  {#if pending.length > 1}
+  {#if data.canReview && pending.length > 1}
     <Button size="sm" onclick={acceptAll} disabled={busy} class="bg-green-600 hover:bg-green-700">
       <CheckCircle class="h-4 w-4" />
       Accept all {pending.length}
@@ -184,6 +184,11 @@
               image was already approved (e.g. on the branch it was merged from)
             {:else if isChange(selected)}
               {percent(selected.diffScore, 3)} of pixels changed
+              {#if selected.reviewedAt}
+                · {selected.status === 'approved' ? 'accepted' : 'rejected'}
+                by {selected.reviewedBy ?? 'a removed user'} on
+                {new Date(selected.reviewedAt).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              {/if}
             {:else if selected.status === 'new'}
               First snapshot — used as the baseline
             {:else}
@@ -206,24 +211,28 @@
                 Diff
               {/if}
             </Button>
-            <Button
-              variant={selected.status === 'rejected' ? 'destructive' : 'outline'}
-              size="sm"
-              disabled={busy || selected.status === 'rejected'}
-              onclick={() => review(selected, 'rejected')}
-            >
-              <XCircle class="h-4 w-4" />
-              {selected.status === 'rejected' ? 'Rejected' : 'Reject'}
-            </Button>
-            <Button
-              size="sm"
-              disabled={busy || selected.status === 'approved'}
-              onclick={() => review(selected, 'approved')}
-              class="bg-green-600 hover:bg-green-700"
-            >
-              <CheckCircle class="h-4 w-4" />
-              {selected.status === 'approved' ? 'Accepted' : 'Accept'}
-            </Button>
+            {#if data.canReview}
+              <Button
+                variant={selected.status === 'rejected' ? 'destructive' : 'outline'}
+                size="sm"
+                disabled={busy || selected.status === 'rejected'}
+                onclick={() => review(selected, 'rejected')}
+              >
+                <XCircle class="h-4 w-4" />
+                {selected.status === 'rejected' ? 'Rejected' : 'Reject'}
+              </Button>
+              <Button
+                size="sm"
+                disabled={busy || selected.status === 'approved'}
+                onclick={() => review(selected, 'approved')}
+                class="bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle class="h-4 w-4" />
+                {selected.status === 'approved' ? 'Accepted' : 'Accept'}
+              </Button>
+            {:else}
+              <Badge variant={STATUS[selected.status].variant}>{STATUS[selected.status].label}</Badge>
+            {/if}
           {:else}
             <Badge variant={STATUS[selected.status].variant}>{STATUS[selected.status].label}</Badge>
           {/if}

@@ -77,7 +77,9 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [ ] CI integration for GitLab, Bitbucket and Azure DevOps
 - [ ] GitHub App instead of personal tokens (org-wide install, Checks API with annotations)
 - [x] Separate runs per test suite (e.g. Vitest vs. Playwright in the same project and branch): run merging and baselines per suite
-- [ ] Multiple users, roles (Admin, Reviewer, Developer/Viewer), per-project permissions, teams, invitations
+- [x] Multiple users, instance roles (admin, member), project roles (viewer, reviewer, maintainer), invitation links, review history (who accepted / rejected)
+- [ ] Store refresh tokens hashed (like API tokens)
+- [ ] Send invitations by e-mail (with the SMTP notifications below)
 - [x] Security fixes
   - [x] Image endpoints require authentication (signed, expiring URLs or JWT)
   - [x] API tokens stored hashed, not in plain text
@@ -93,6 +95,7 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 
 - [ ] License key verification and editions (can start in parallel to Phase 1, to onboard pilot customers early)
 - [ ] SSO: OIDC (Entra ID, Okta, Keycloak, Google) and SAML 2.0; optional SCIM; role mapping from IdP groups
+- [ ] Teams (groups of users with project roles), mapped from IdP groups
 - [ ] Immutable, searchable, exportable audit log (approvals, rejections, tokens, permissions)
 - [ ] Retention policies for runs and images (baselines are always kept), storage usage per project
 - [ ] Observability: Prometheus metrics, structured JSON logs, OpenTelemetry tracing
