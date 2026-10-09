@@ -11,7 +11,7 @@ export const load: PageServerLoad = async ({ params }) => {
 };
 
 export const actions: Actions = {
-  default: async ({ request, params, cookies, url }) => {
+  default: async ({ request, params, cookies, url, locals }) => {
     const data = await request.formData();
     const password = String(data.get('password') ?? '');
     if (password !== String(data.get('confirm') ?? '')) {
@@ -20,7 +20,7 @@ export const actions: Actions = {
 
     const res = await fetch(`${apiBase()}/invitations/token/${encodeURIComponent(params.token)}/accept`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...locals.forwarded },
       body: JSON.stringify({ password }),
     });
     if (!res.ok) {
