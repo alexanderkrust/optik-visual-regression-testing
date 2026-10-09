@@ -38,6 +38,8 @@ jobs:
           pnpm --filter @optik/api exec tsc --noEmit
           pnpm --filter @optik/web check
 
+      - name: Core unit tests
+        run: pnpm --filter @optik/core test
       - name: API unit tests
         run: pnpm --filter @optik/api test
       - name: Web unit tests

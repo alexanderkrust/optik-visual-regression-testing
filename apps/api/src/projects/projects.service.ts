@@ -15,6 +15,7 @@ import type {
   UpdateProjectDto,
 } from '@optik/shared';
 import { AccessService, CurrentUser } from '../access/access.service';
+import { CI_PROVIDERS, checkRepository, PROVIDERS } from '../ci/providers';
 
 export interface SetProjectMemberDto {
   email: string;
@@ -23,19 +24,6 @@ export interface SetProjectMemberDto {
 import type { Project as ProjectRow } from '@prisma/client';
 
 const BRANCH_PATTERN = /^[^\s~^:?*[\\]{1,255}$/;
-
-const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
-
-/** "" clears the setting, undefined leaves it unchanged. */
-function githubRepo(value: string | undefined): string | null | undefined {
-  if (value === undefined) return undefined;
-  const repo = value.trim();
-  if (!repo) return null;
-  if (!REPO_PATTERN.test(repo)) {
-    throw new BadRequestException('githubRepo must look like "owner/repo"');
-  }
-  return repo;
-}
 
 function apiUrl(value: string | undefined): string | null | undefined {
   if (value === undefined) return undefined;
@@ -46,7 +34,51 @@ function apiUrl(value: string | undefined): string | null | undefined {
   } catch {
     // fall through
   }
-  throw new BadRequestException('githubApiUrl must be an http(s) URL');
+  throw new BadRequestException('ciApiUrl must be an http(s) URL');
+}
+
+/** "" clears the setting, undefined leaves it unchanged. */
+function optional(value: string | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  return value.trim() || null;
+}
+
+/**
+ * The CI settings after applying `dto` to `current`. A stored token is only
+ * kept while provider and API URL stay the same — so it is never sent to
+ * another server than the one it was entered for.
+ */
+function ciSettings(current: ProjectRow, dto: UpdateProjectDto, encrypt: (token: string) => string) {
+  if (dto.ciProvider === '') {
+    return { ciProvider: null, ciRepository: null, ciApiUrl: null, ciTokenEncrypted: null };
+  }
+  if (dto.ciProvider !== undefined && !CI_PROVIDERS.includes(dto.ciProvider)) {
+    throw new BadRequestException(`ciProvider must be one of ${CI_PROVIDERS.join(', ')}`);
+  }
+  const provider = dto.ciProvider ?? current.ciProvider;
+  const repo = optional(dto.ciRepository);
+  const repository = repo === undefined ? current.ciRepository : repo;
+  const url = apiUrl(dto.ciApiUrl);
+  const api = url === undefined ? current.ciApiUrl : url;
+
+  if (repository && !provider) throw new BadRequestException('Choose the CI provider of the repository');
+  if (provider && repository) {
+    const problem = checkRepository(provider, repository);
+    if (problem) throw new BadRequestException(problem);
+    if (!api && !PROVIDERS[provider].defaultApiUrl) {
+      throw new BadRequestException(`${PROVIDERS[provider].label} needs the API URL of your server`);
+    }
+  }
+
+  const token = dto.ciToken?.trim();
+  const moved = provider !== current.ciProvider || api !== current.ciApiUrl;
+  return {
+    ciProvider: provider,
+    ciRepository: repository,
+    ciApiUrl: api,
+    ciTokenEncrypted:
+      token === undefined ? (moved ? null : undefined) : token ? encrypt(token) : null,
+  };
 }
 
 function branchName(value: string | undefined): string | undefined {
@@ -88,20 +120,16 @@ export class ProjectsService {
   }
 
   async update(user: CurrentUser, slug: string, dto: UpdateProjectDto): Promise<Project> {
-    const { role } = await this.access.requireProject(user, { slug }, 'maintainer');
+    const { project, role } = await this.access.requireProject(user, { slug }, 'maintainer');
     if (dto?.failTestsOnChanges !== undefined && typeof dto.failTestsOnChanges !== 'boolean') {
       throw new BadRequestException('failTestsOnChanges must be true or false');
     }
-    const token = dto?.githubToken?.trim();
     const row = await this.prisma.project.update({
       where: { slug },
       data: {
         defaultBranch: branchName(dto?.defaultBranch),
         failTestsOnChanges: dto?.failTestsOnChanges,
-        githubRepo: githubRepo(dto?.githubRepo),
-        githubApiUrl: apiUrl(dto?.githubApiUrl),
-        githubTokenEncrypted:
-          token === undefined ? undefined : token ? this.secrets.encrypt(token) : null,
+        ...ciSettings(project, dto ?? {}, (token) => this.secrets.encrypt(token)),
       },
     });
     return toDto(row, role);
@@ -174,9 +202,10 @@ function toDto(r: ProjectRow, myRole: EffectiveProjectRole): Project {
     slug: r.slug,
     defaultBranch: r.defaultBranch,
     failTestsOnChanges: r.failTestsOnChanges,
-    githubRepo: r.githubRepo,
-    githubApiUrl: r.githubApiUrl,
-    githubTokenConfigured: r.githubTokenEncrypted !== null,
+    ciProvider: r.ciProvider,
+    ciRepository: r.ciRepository,
+    ciApiUrl: r.ciApiUrl,
+    ciTokenConfigured: r.ciTokenEncrypted !== null,
     myRole,
     createdAt: r.createdAt.toISOString(),
   };
