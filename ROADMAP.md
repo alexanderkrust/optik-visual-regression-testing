@@ -85,7 +85,8 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
   - [x] API tokens stored hashed, not in plain text
   - [x] Rate limiting of failed sign-ins (per account)
   - [x] Security headers (CSP, HSTS, …)
-- [ ] Diffing as background jobs (queue in Postgres, e.g. pg-boss — no extra Redis)
+- [x] Diffing off the main thread: worker thread pool (`DIFF_WORKERS`) — the API stays responsive and diffs run in parallel (8 large diffs: 16.2 s → 3.7 s, API blocked up to 5 s → 44 ms)
+- [ ] Optional: durable job queue / separate worker nodes, if a single instance's CPUs aren't enough (adapters need the result synchronously today)
 - [ ] Notifications: Slack, Microsoft Teams, e-mail (SMTP), generic webhooks
 - [ ] Review UI: slider / onion-skin diff, zoom, keyboard shortcuts, comments, ignore regions, per-snapshot thresholds
 
