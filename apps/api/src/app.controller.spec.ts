@@ -21,7 +21,7 @@ describe('AppController', () => {
   });
 
   it('reports liveness', () => {
-    expect(controller.health()).toEqual({ status: 'ok' });
+    expect(controller.health()).toEqual({ status: 'ok', version: expect.any(String) });
   });
 
   it('is ready when database and storage respond', async () => {

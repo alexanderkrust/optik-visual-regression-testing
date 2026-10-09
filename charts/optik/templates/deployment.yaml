@@ -1,0 +1,143 @@
+{{- $localStorage := not .Values.storage.s3.enabled }}
+{{- if and $localStorage (gt (int .Values.replicaCount) 1) }}
+{{- fail "replicaCount > 1 requires S3 storage (storage.s3.enabled) — a local volume can only be used by one pod" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "optik.fullname" . }}
+  labels:
+    {{- include "optik.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    # A ReadWriteOnce volume can't be mounted by old and new pod at the same time
+    type: {{ ternary "Recreate" "RollingUpdate" $localStorage }}
+  selector:
+    matchLabels:
+      {{- include "optik.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "optik.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "optik.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.postgresql.enabled }}
+      initContainers:
+        # Migrations run on start, so wait until the bundled database accepts connections
+        - name: wait-for-postgresql
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          command: ["sh", "-c", "until pg_isready -h {{ include "optik.postgresql.fullname" . }} -p 5432 -U optik; do sleep 2; done"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: optik
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "optik.database.secretName" . }}
+                  key: {{ include "optik.database.secretKey" . }}
+            {{- if .Values.storage.s3.enabled }}
+            - name: S3_BUCKET
+              value: {{ .Values.storage.s3.bucket | quote }}
+            - name: S3_ENDPOINT
+              value: {{ .Values.storage.s3.endpoint | quote }}
+            - name: S3_REGION
+              value: {{ .Values.storage.s3.region | quote }}
+            - name: S3_FORCE_PATH_STYLE
+              value: {{ .Values.storage.s3.forcePathStyle | quote }}
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "optik.s3.secretName" . }}
+                  key: S3_ACCESS_KEY_ID
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "optik.s3.secretName" . }}
+                  key: S3_SECRET_ACCESS_KEY
+            {{- end }}
+            {{- with .Values.admin.existingSecret }}
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef: { name: {{ . }}, key: ADMIN_EMAIL }
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ . }}, key: ADMIN_PASSWORD }
+            {{- end }}
+            {{- with .Values.secrets.existingSecret }}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef: { name: {{ . }}, key: JWT_SECRET }
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef: { name: {{ . }}, key: SESSION_SECRET }
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            # Allows time for database migrations on start
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /api/ready, port: http }
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if $localStorage }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- end }}
+      {{- if $localStorage }}
+      volumes:
+        - name: data
+          {{- if .Values.storage.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.storage.persistence.existingClaim | default (printf "%s-data" (include "optik.fullname" .)) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

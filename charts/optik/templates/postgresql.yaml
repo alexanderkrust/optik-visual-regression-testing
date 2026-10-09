@@ -1,0 +1,104 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "optik.postgresql.fullname" . }}
+  labels:
+    {{- include "optik.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: {{ include "optik.postgresql.password" . | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "optik.postgresql.fullname" . }}
+  labels:
+    {{- include "optik.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  ports:
+    - port: 5432
+      targetPort: postgresql
+      name: postgresql
+  selector:
+    {{- include "optik.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "optik.postgresql.fullname" . }}
+  labels:
+    {{- include "optik.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  serviceName: {{ include "optik.postgresql.fullname" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "optik.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgresql
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include "optik.postgresql.password" . | sha256sum }}
+      labels:
+        {{- include "optik.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgresql
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70   # postgres user in the alpine image
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgresql
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: postgresql
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: optik
+            - name: POSTGRES_USER
+              value: optik
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "optik.postgresql.fullname" . }}
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "optik", "-d", "optik"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "optik", "-d", "optik"]
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.postgresql.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.persistence.size }}
+{{- end }}

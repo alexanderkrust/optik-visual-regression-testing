@@ -11,9 +11,12 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "test": "turbo test",
-    "clean": "turbo clean && rm -rf node_modules"
+    "clean": "turbo clean && rm -rf node_modules",
+    "changeset": "changeset",
+    "version-packages": "changeset version && pnpm install --lockfile-only"
   },
   "devDependencies": {
+    "@changesets/cli": "^2",
     "@types/node": "^25.6.0",
     "prettier": "^3.8.3",
     "turbo": "^2.9.8",

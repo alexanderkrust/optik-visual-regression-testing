@@ -11,7 +11,10 @@ describe('health, setup and authentication', () => {
 
   describe('health', () => {
     it('reports liveness and readiness', async () => {
-      expect((await call(`${t.api}/health`)).body).toEqual({ status: 'ok' });
+      expect((await call(`${t.api}/health`)).body).toEqual({
+        status: 'ok',
+        version: require('../package.json').version,
+      });
       expect((await call(`${t.api}/ready`)).body).toEqual({
         status: 'ok',
         checks: { database: true, storage: true },

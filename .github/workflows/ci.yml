@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22
+
+jobs:
+  check:
+    name: Typecheck & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @optik/api db:generate
+      - name: Build shared packages and adapters
+        run: pnpm --filter "./packages/**" build
+
+      - name: Typecheck
+        run: |
+          pnpm --filter "./packages/**" lint
+          pnpm --filter @optik/api exec tsc --noEmit
+          pnpm --filter @optik/web check
+
+      - name: API unit tests
+        run: pnpm --filter @optik/api test
+      - name: Web unit tests
+        run: |
+          pnpm --filter @optik/web exec playwright install --with-deps chromium
+          pnpm --filter @optik/web test:unit -- --run
+
+  api-integration:
+    name: API integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: optik
+          POSTGRES_PASSWORD: optik
+          POSTGRES_DB: optik
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U optik"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @optik/api db:generate
+      - run: pnpm --filter "./packages/**" build
+      - name: Start S3 (SeaweedFS)
+        run: |
+          docker create --name s3 -p 8333:8333 chrislusf/seaweedfs:4.48 \
+            server -dir=/data -master.volumeSizeLimitMB=1024 -volume.max=100 -s3 -s3.config=/etc/seaweedfs/s3.json
+          # docker cp instead of a bind mount, so this also works with nested Docker (act)
+          docker cp docker/seaweedfs/s3.json s3:/etc/seaweedfs/s3.json
+          docker start s3
+          timeout 60 sh -c 'until curl -sf http://127.0.0.1:8333/healthz; do sleep 1; done'
+      - name: Integration tests
+        run: pnpm --filter @optik/api test:e2e
+        env:
+          TEST_DATABASE_URL: postgresql://optik:optik@localhost:5432/optik_test
+          TEST_S3_ENDPOINT: http://localhost:8333
+
+  smoke:
+    name: Image smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: optik:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start optik and PostgreSQL
+        run: docker compose up -d --no-build
+        env:
+          OPTIK_IMAGE: optik:ci
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter "./packages/**" build
+      - run: pnpm --filter @optik/example exec playwright install --with-deps chromium
+
+      - name: Create admin, project and token
+        run: echo "OPTIK_TOKEN=$(node scripts/smoke-setup.mjs http://localhost:3000)" >> "$GITHUB_ENV"
+      - name: Vitest adapter against the image
+        working-directory: apps/example
+        run: pnpm exec vitest run
+        env:
+          OPTIK_SERVER_URL: http://localhost:3000
+      - name: Playwright adapter against the image
+        working-directory: apps/example
+        run: pnpm exec playwright test
+        env:
+          OPTIK_SERVER_URL: http://localhost:3000
+
+      - name: optik logs
+        if: failure()
+        run: docker compose logs optik
+
+  helm:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint charts/optik
+      - name: Render and validate manifests
+        run: |
+          mkdir -p rendered
+          helm template optik charts/optik > rendered/default.yaml
+          helm template optik charts/optik \
+            --set postgresql.enabled=false --set database.existingSecret=db \
+            --set storage.s3.enabled=true --set storage.s3.existingSecret=s3 \
+            --set replicaCount=3 --set ingress.enabled=true \
+            > rendered/production.yaml
+          # Manifests via stdin: no bind mounts, so this also works with nested Docker (act)
+          cat rendered/*.yaml | docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 -strict -summary -

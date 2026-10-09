@@ -1,0 +1,129 @@
+# optik Helm chart
+#
+# Minimal install (evaluation): bundled PostgreSQL, screenshots on a volume
+#   helm install optik oci://ghcr.io/alexanderkrust/charts/optik
+#
+# Production: external PostgreSQL via database.existingSecret, S3 for screenshots,
+# an ingress — see the examples below each section.
+
+image:
+  repository: ghcr.io/alexanderkrust/optik
+  # Defaults to the chart's appVersion
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# More than one replica requires S3 storage (storage.s3.enabled), because the
+# local volume can only be mounted by one pod.
+replicaCount: 1
+
+# ── Database ─────────────────────────────────────────────────────────────────
+database:
+  # Connection string of an external PostgreSQL (ignored when postgresql.enabled)
+  url: ""
+  # Or read it from an existing Secret (recommended for production)
+  existingSecret: ""
+  existingSecretKey: DATABASE_URL
+
+# Bundled single-instance PostgreSQL for evaluation and small installs.
+# For production, use a managed / operated PostgreSQL and set enabled: false.
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+  # Generated on install and kept on upgrades when empty
+  password: ""
+  persistence:
+    size: 8Gi
+    storageClass: ""
+  resources: {}
+
+# ── Screenshot storage ───────────────────────────────────────────────────────
+storage:
+  # Local volume (default) — single replica only
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+    accessModes: [ReadWriteOnce]
+    # Use an existing PersistentVolumeClaim instead of creating one
+    existingClaim: ""
+  # S3-compatible object storage (AWS S3, Garage, Ceph, SeaweedFS, MinIO, …)
+  s3:
+    enabled: false
+    bucket: optik-snapshots
+    endpoint: ""          # empty for AWS S3
+    region: us-east-1
+    forcePathStyle: true  # false for AWS virtual-hosted-style URLs
+    # Secret with S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY
+    existingSecret: ""
+    accessKeyId: ""
+    secretAccessKey: ""
+
+# ── Optional settings ────────────────────────────────────────────────────────
+# Create the admin account on install instead of the setup page in the UI.
+# Secret with ADMIN_EMAIL and ADMIN_PASSWORD.
+admin:
+  existingSecret: ""
+
+# JWT_SECRET / SESSION_SECRET are generated on first start and stored in the
+# database. Set an existing Secret with both keys to manage them yourself.
+secrets:
+  existingSecret: ""
+
+# Additional environment variables, e.g. JWT_ACCESS_EXPIRES
+extraEnv: []
+#  - name: JWT_ACCESS_EXPIRES
+#    value: 30m
+
+# ── Networking ───────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: optik.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: optik-tls
+  #    hosts: [optik.example.com]
+
+# ── Pod settings ─────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}

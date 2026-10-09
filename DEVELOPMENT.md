@@ -259,6 +259,59 @@ They need a PostgreSQL database they may wipe:
 pnpm --filter @optik/api test:e2e
 ```
 
+## CI and releases
+
+### CI (`.github/workflows/ci.yml`)
+
+Runs on every pull request and on `main`:
+
+| Job | What it does |
+|-----|--------------|
+| Typecheck & unit tests | builds the packages, typechecks everything, runs API and web unit tests |
+| API integration tests | PostgreSQL service + SeaweedFS, `pnpm --filter @optik/api test:e2e` |
+| Image smoke test | builds the production image, starts it with `docker-compose.yml`, prepares it with [scripts/smoke-setup.mjs](scripts/smoke-setup.mjs) and runs the example app's Vitest and Playwright tests against it |
+| Helm chart | `helm lint`, renders default and production values, validates them with kubeconform |
+
+Workflows can be run locally with [act](https://github.com/nektos/act), e.g. `act pull_request -j helm`. The integration and smoke jobs talk to containers on `localhost`, which act can't reproduce — run their commands directly instead.
+
+### Versioning
+
+optik has **one product version**: image, Helm chart and all `@optik/*` packages share it ([Changesets](https://github.com/changesets/changesets) "fixed" group, see [.changeset/](.changeset/)). Add a changeset to every pull request with a user-facing change:
+
+```bash
+pnpm changeset
+```
+
+### Releasing (`.github/workflows/release.yml`)
+
+1. On every push to `main`, Changesets updates the **"Version Packages"** pull request (version bump + `CHANGELOG.md`).
+2. Merging it puts the new version on `main`. The workflow sees a version without a git tag and publishes it:
+   - multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/<owner>/optik:<version>`, `:<major.minor>`, `:latest`, with SBOM and SLSA provenance attestations
+   - cosign signature (keyless) and SPDX SBOM attestation
+   - Helm chart to `oci://ghcr.io/<owner>/charts/optik`, signed
+   - git tag `v<version>` and GitHub release with notes from the changelog, SBOM and chart attached
+3. Version `0.0.0` is never released, and versions that already have a tag are skipped — re-running the workflow is safe.
+
+After the very first release, make the `optik` and `charts/optik` packages **public** in the GitHub package settings (GHCR packages of personal accounts start private).
+
+### Helm chart
+
+The chart lives in [charts/optik](charts/optik). Its `version` / `appVersion` in `Chart.yaml` are placeholders — the release workflow sets both to the product version. To try it on a throwaway cluster:
+
+```bash
+docker build -t optik:dev .
+```
+
+```bash
+docker run -d --name k3s --privileged -p 16443:6443 rancher/k3s:v1.31.4-k3s1 server --disable traefik
+```
+
+```bash
+docker save optik:dev | docker exec -i k3s ctr images import -
+```
+
+Then install with `--set image.repository=docker.io/library/optik --set image.tag=dev --set image.pullPolicy=Never` (Helm needs the kubeconfig from `/etc/rancher/k3s/k3s.yaml` in the container).
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |

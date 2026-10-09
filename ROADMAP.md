@@ -61,9 +61,10 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
   - [x] Local volume storage by default, S3 optional
   - [x] `*_FILE` variants for secrets (Docker / Kubernetes secrets)
 - [x] Working production `docker-compose.yml` (with Postgres)
-- [ ] Helm chart for Kubernetes
-- [ ] Published, cosign-signed images with SBOM; tarball for air-gapped installs
-- [ ] CI pipeline for optik itself, semantic versioning, changelog
+- [x] Helm chart for Kubernetes
+- [x] Release pipeline: cosign-signed multi-arch images with SBOM and provenance, signed Helm chart (first release still to be published)
+- [ ] Tarball for air-gapped installs
+- [x] CI pipeline for optik itself, semantic versioning, changelog (Changesets, one product version)
 - [x] Meaningful API test coverage — integration tests against a real database (~96 % of lines)
 
 ## Phase 1 — Team-ready

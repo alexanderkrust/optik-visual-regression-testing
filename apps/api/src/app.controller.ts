@@ -3,6 +3,10 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from './database/prisma.service';
 import { StorageService } from './storage/storage.service';
 
+/** Product version — the package.json next to dist/ in the image and in development. */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { version } = require('../package.json') as { version: string };
+
 @ApiTags('health')
 @Controller()
 export class AppController {
@@ -15,7 +19,7 @@ export class AppController {
   @Get('health')
   @ApiOperation({ summary: 'Liveness check' })
   health() {
-    return { status: 'ok' };
+    return { status: 'ok', version };
   }
 
   /** Readiness: database and storage are reachable. */
