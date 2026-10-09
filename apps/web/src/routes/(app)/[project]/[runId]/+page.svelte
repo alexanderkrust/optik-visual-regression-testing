@@ -105,7 +105,11 @@
 
 <div class="flex items-center justify-between mb-6 gap-4">
   <div>
-    <h1 class="text-2xl font-bold tracking-tight font-mono">{data.runId.slice(0, 8)}</h1>
+    <h1 class="text-2xl font-bold tracking-tight font-mono flex items-center gap-3">
+      {data.runId.slice(0, 8)}
+      <Badge variant="outline" class="font-mono text-xs font-normal">{data.run.suite}</Badge>
+      <span class="text-sm font-normal text-muted-foreground">{data.run.branch}</span>
+    </h1>
     <p class="text-muted-foreground text-sm mt-1">
       {snapshots.length} snapshot{snapshots.length === 1 ? '' : 's'}
       {#if pending.length > 0}
@@ -127,7 +131,7 @@
       </p>
     {/if}
   </div>
-  {#if pending.length > 1}
+  {#if data.canReview && pending.length > 1}
     <Button size="sm" onclick={acceptAll} disabled={busy} class="bg-green-600 hover:bg-green-700">
       <CheckCircle class="h-4 w-4" />
       Accept all {pending.length}
@@ -175,8 +179,16 @@
         <div>
           <h2 class="text-lg font-semibold">{selected.name}</h2>
           <p class="text-muted-foreground text-sm mt-0.5">
-            {#if isChange(selected)}
+            {#if selected.autoApprovedFromId}
+              {percent(selected.diffScore, 3)} of pixels changed · accepted automatically — the same
+              image was already approved (e.g. on the branch it was merged from)
+            {:else if isChange(selected)}
               {percent(selected.diffScore, 3)} of pixels changed
+              {#if selected.reviewedAt}
+                · {selected.status === 'approved' ? 'accepted' : 'rejected'}
+                by {selected.reviewedBy ?? 'a removed user'} on
+                {new Date(selected.reviewedAt).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              {/if}
             {:else if selected.status === 'new'}
               First snapshot — used as the baseline
             {:else}
@@ -199,24 +211,28 @@
                 Diff
               {/if}
             </Button>
-            <Button
-              variant={selected.status === 'rejected' ? 'destructive' : 'outline'}
-              size="sm"
-              disabled={busy || selected.status === 'rejected'}
-              onclick={() => review(selected, 'rejected')}
-            >
-              <XCircle class="h-4 w-4" />
-              {selected.status === 'rejected' ? 'Rejected' : 'Reject'}
-            </Button>
-            <Button
-              size="sm"
-              disabled={busy || selected.status === 'approved'}
-              onclick={() => review(selected, 'approved')}
-              class="bg-green-600 hover:bg-green-700"
-            >
-              <CheckCircle class="h-4 w-4" />
-              {selected.status === 'approved' ? 'Accepted' : 'Accept'}
-            </Button>
+            {#if data.canReview}
+              <Button
+                variant={selected.status === 'rejected' ? 'destructive' : 'outline'}
+                size="sm"
+                disabled={busy || selected.status === 'rejected'}
+                onclick={() => review(selected, 'rejected')}
+              >
+                <XCircle class="h-4 w-4" />
+                {selected.status === 'rejected' ? 'Rejected' : 'Reject'}
+              </Button>
+              <Button
+                size="sm"
+                disabled={busy || selected.status === 'approved'}
+                onclick={() => review(selected, 'approved')}
+                class="bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle class="h-4 w-4" />
+                {selected.status === 'approved' ? 'Accepted' : 'Accept'}
+              </Button>
+            {:else}
+              <Badge variant={STATUS[selected.status].variant}>{STATUS[selected.status].label}</Badge>
+            {/if}
           {:else}
             <Badge variant={STATUS[selected.status].variant}>{STATUS[selected.status].label}</Badge>
           {/if}
@@ -231,7 +247,7 @@
                 Before (baseline)
               </p>
               <img
-                src={api.snapshots.imageUrl(selected.baselineId)}
+                src={selected.baselineImageUrl}
                 alt="{selected.name} — baseline"
                 class="max-w-full rounded"
               />
@@ -243,7 +259,7 @@
                 After (this run)
               </p>
               <img
-                src={api.snapshots.imageUrl(selected.id)}
+                src={selected.imageUrl}
                 alt="{selected.name} — this run"
                 class="max-w-full rounded"
               />
@@ -255,13 +271,13 @@
           <CardContent class="p-4">
             {#if isChange(selected) && view === 'diff'}
               <img
-                src={api.snapshots.diffUrl(selected.id)}
+                src={selected.diffUrl}
                 alt="{selected.name} — diff"
                 class="max-w-full rounded"
               />
             {:else}
               <img
-                src={api.snapshots.imageUrl(selected.id)}
+                src={selected.imageUrl}
                 alt={selected.name}
                 class="max-w-full rounded"
               />

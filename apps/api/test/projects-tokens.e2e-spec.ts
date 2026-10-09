@@ -50,6 +50,17 @@ describe('projects and API tokens', () => {
       expect(list.body[0]).not.toHaveProperty('token');
     });
 
+    it('stores only a hash of the token, plus a short prefix to recognise it', async () => {
+      const token = await admin.createToken('shop');
+      const [row] = await t.prisma.apiToken.findMany();
+      expect(row.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(row.tokenHash).not.toContain(token.slice(6));
+      expect(row.tokenPrefix).toBe(token.slice(0, 12));
+
+      const list = await call(`${t.api}/projects/shop/tokens`, { token: admin.jwt });
+      expect(list.body[0].prefix).toBe(token.slice(0, 12));
+    });
+
     it('authenticates adapters', async () => {
       const adapter = new AdapterClient(t.api, await admin.createToken('shop'));
       expect((await adapter.startRun()).status).toBe(201);

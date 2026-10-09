@@ -10,9 +10,22 @@ model Project {
   id        String     @id @default(uuid())
   name      String
   slug      String     @unique
+  /// Branch whose baselines other branches fall back to when the git history
+  /// doesn't lead to one (see SnapshotsService.findBaseline)
+  defaultBranch String @default("main") @map("default_branch")
+  /// Let tests fail on visual changes. Off when changes are reported as a
+  /// commit status instead (CI stays green, the status blocks the merge).
+  failTestsOnChanges Boolean @default(true) @map("fail_tests_on_changes")
+  /// GitHub commit statuses: "owner/repo", API URL for GitHub Enterprise
+  /// Server (null = github.com) and the token, encrypted (see SecretBox)
+  githubRepo           String? @map("github_repo")
+  githubApiUrl         String? @map("github_api_url")
+  githubTokenEncrypted String? @map("github_token_encrypted")
   createdAt DateTime   @default(now()) @map("created_at")
   runs      Run[]
   tokens    ApiToken[]
+  members   ProjectMember[]
+  invitations Invitation[]
 
   @@map("projects")
 }
@@ -22,7 +35,10 @@ model ApiToken {
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   projectId String    @map("project_id")
   name      String
-  token     String    @unique
+  /// SHA-256 of the token — the token itself is only shown once, on creation
+  tokenHash   String  @unique @map("token_hash")
+  /// First characters of the token, to recognise it in the UI
+  tokenPrefix String  @map("token_prefix")
   expiresAt DateTime? @map("expires_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
@@ -41,8 +57,16 @@ model Run {
   project   Project    @relation(fields: [projectId], references: [id])
   projectId String     @map("project_id")
   branch    String
+  /// Test suite that produced the run (e.g. "vitest", "playwright"). Runs are
+  /// merged and baselines are kept per suite. "default" for runs before suites.
+  suite     String     @default("default")
   commitSha String     @map("commit_sha")
+  /// The commit and its ancestors, newest first (sent by the adapters) —
+  /// baselines come from runs on these commits
+  ancestors String[]   @default([])
   status    RunStatus  @default(running)
+  /// optik URL as the adapter reached it — for links in commit statuses
+  serverUrl String?    @map("server_url")
   createdAt DateTime   @default(now()) @map("created_at")
   // Consecutive runs without visual changes are merged into one run:
   // updatedAt is the last time it ran, runCount how often, lastCommitSha the latest commit.
@@ -51,7 +75,7 @@ model Run {
   lastCommitSha String?    @map("last_commit_sha")
   snapshots     Snapshot[]
 
-  @@index([projectId, branch, createdAt])
+  @@index([projectId, suite, branch, createdAt])
   @@map("runs")
 }
 
@@ -73,19 +97,79 @@ model Snapshot {
   baselineId String?        @map("baseline_id")
   children   Snapshot[]     @relation("baseline")
   diffScore  Float?         @map("diff_score")
+  /// SHA-256 of the decoded pixels — finds identical, already approved images
+  imageHash  String?        @map("image_hash")
+  /// Set when the snapshot was accepted automatically because an identical
+  /// image was already approved (e.g. on the branch a squash merge came from)
+  autoApprovedFromId String? @map("auto_approved_from_id")
+  /// Who accepted or rejected the change, and when
+  reviewedBy   User?     @relation("reviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedById String?   @map("reviewed_by_id")
+  reviewedAt   DateTime? @map("reviewed_at")
   createdAt  DateTime       @default(now()) @map("created_at")
 
+  @@index([name, imageHash])
   @@map("snapshots")
+}
+
+/// admin: manages users, creates projects, has access to every project.
+/// member: sees only the projects they are a member of.
+enum UserRole {
+  admin
+  member
 }
 
 model User {
   id            String         @id @default(uuid())
   email         String         @unique
   password      String         @map("password_hash")
+  role          UserRole       @default(member)
   createdAt     DateTime       @default(now()) @map("created_at")
   refreshTokens RefreshToken[]
+  memberships   ProjectMember[]
+  reviews       Snapshot[]     @relation("reviewer")
+  invitationsSent Invitation[] @relation("inviter")
 
   @@map("users")
+}
+
+/// viewer: sees runs and images. reviewer: + accepts / rejects changes.
+/// maintainer: + manages tokens, settings and members of the project.
+enum ProjectRole {
+  viewer
+  reviewer
+  maintainer
+}
+
+model ProjectMember {
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String      @map("project_id")
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String      @map("user_id")
+  role      ProjectRole
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@id([projectId, userId])
+  @@map("project_members")
+}
+
+/// A link that lets someone create an account (and optionally join a project).
+model Invitation {
+  id          String       @id @default(uuid())
+  email       String
+  /// SHA-256 of the token in the link
+  tokenHash   String       @unique @map("token_hash")
+  role        UserRole     @default(member)
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String?      @map("project_id")
+  projectRole ProjectRole? @map("project_role")
+  invitedBy   User?        @relation("inviter", fields: [invitedById], references: [id], onDelete: SetNull)
+  invitedById String?      @map("invited_by_id")
+  expiresAt   DateTime     @map("expires_at")
+  acceptedAt  DateTime?    @map("accepted_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  @@map("invitations")
 }
 
 model RefreshToken {

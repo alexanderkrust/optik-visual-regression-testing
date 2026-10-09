@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   Controller,
+  Headers,
+  UnauthorizedException,
   Get,
   Post,
   Patch,
@@ -15,19 +17,30 @@ import { ApiTags, ApiOperation, ApiConsumes, ApiQuery } from '@nestjs/swagger';
 import { TokenGuard } from '../tokens/token.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SnapshotsService } from './snapshots.service';
+import { ImageKind, ImageUrlSigner } from './image-urls';
+import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../database/prisma.service';
+import { AccessService, CurrentUser } from '../access/access.service';
+import { User } from '../access/current-user.decorator';
 import type { UpdateSnapshotStatusDto } from '@optik/shared';
 
 @ApiTags('snapshots')
 @Controller('snapshots')
 export class SnapshotsController {
-  constructor(private readonly snapshotsService: SnapshotsService) {}
+  constructor(
+    private readonly snapshotsService: SnapshotsService,
+    private readonly urls: ImageUrlSigner,
+    private readonly jwt: JwtService,
+    private readonly prisma: PrismaService,
+    private readonly access: AccessService,
+  ) {}
 
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'List snapshots for a run' })
   @ApiQuery({ name: 'runId', required: true })
-  findByRun(@Query('runId') runId: string) {
-    return this.snapshotsService.findByRun(runId);
+  findByRun(@User() user: CurrentUser, @Query('runId') runId: string) {
+    return this.snapshotsService.findByRun(user, runId);
   }
 
   @Post()
@@ -66,22 +79,77 @@ export class SnapshotsController {
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Approve or reject a snapshot' })
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateSnapshotStatusDto) {
-    return this.snapshotsService.updateStatus(id, dto);
+  updateStatus(
+    @User() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateSnapshotStatusDto,
+  ) {
+    return this.snapshotsService.updateStatus(user, id, dto);
   }
 
   @Get(':id/image')
-  @ApiOperation({ summary: 'Serve snapshot PNG' })
-  async getImage(@Param('id') id: string, @Res() res) {
-    const buffer = await this.snapshotsService.getImageBuffer(id);
-    sendPng(res, buffer);
+  @ApiOperation({
+    summary: 'Serve snapshot PNG',
+    description: 'Requires the signed URL from the snapshot (imageUrl) or a JWT.',
+  })
+  async getImage(
+    @Param('id') id: string,
+    @Query('expires') expires: string,
+    @Query('signature') signature: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Res() res,
+  ) {
+    await this.assertImageAccess(id, 'image', expires, signature, authorization);
+    sendPng(res, await this.snapshotsService.getImageBuffer(id));
   }
 
   @Get(':id/diff')
-  @ApiOperation({ summary: 'Serve diff PNG' })
-  async getDiff(@Param('id') id: string, @Res() res) {
-    const buffer = await this.snapshotsService.getDiffBuffer(id);
-    sendPng(res, buffer);
+  @ApiOperation({
+    summary: 'Serve diff PNG',
+    description: 'Requires the signed URL from the snapshot (diffUrl) or a JWT.',
+  })
+  async getDiff(
+    @Param('id') id: string,
+    @Query('expires') expires: string,
+    @Query('signature') signature: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Res() res,
+  ) {
+    await this.assertImageAccess(id, 'diff', expires, signature, authorization);
+    sendPng(res, await this.snapshotsService.getDiffBuffer(id));
+  }
+
+  /**
+   * Images are private: a valid signed URL, or a signed-in user (JWT) who can
+   * see the snapshot's project.
+   */
+  private async assertImageAccess(
+    id: string,
+    kind: ImageKind,
+    expires: string | undefined,
+    signature: string | undefined,
+    authorization: string | undefined,
+  ) {
+    if (this.urls.verify(id, kind, expires, signature)) return;
+    if (authorization?.startsWith('Bearer ')) {
+      let userId: string | null = null;
+      try {
+        userId = this.jwt.verify<{ sub: string }>(authorization.slice(7)).sub;
+      } catch {
+        // invalid token: fall through
+      }
+      const user = userId
+        ? await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, role: true },
+          })
+        : null;
+      if (user) {
+        await this.access.requireSnapshot(user, id, 'viewer');
+        return;
+      }
+    }
+    throw new UnauthorizedException('The image URL is invalid or has expired');
   }
 }
 

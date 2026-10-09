@@ -1,7 +1,64 @@
+/** admin: manages users, creates projects, sees every project. member: only their projects. */
+export type UserRole = 'admin' | 'member';
+
+/** viewer: sees runs. reviewer: + accepts / rejects. maintainer: + tokens, settings, members. */
+export type ProjectRole = 'viewer' | 'reviewer' | 'maintainer';
+
+/** A user's role in a project; instance admins count as "admin". */
+export type EffectiveProjectRole = ProjectRole | 'admin';
+
+export interface User {
+  id: string;
+  email: string;
+  role: UserRole;
+  createdAt: string;
+}
+
+export interface ProjectMember {
+  userId: string;
+  email: string;
+  role: ProjectRole;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: UserRole;
+  projectSlug: string | null;
+  projectRole: ProjectRole | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface CreateInvitationDto {
+  email: string;
+  role?: UserRole;
+  /** Optionally add the new user to a project right away */
+  projectSlug?: string;
+  projectRole?: ProjectRole;
+}
+
+export interface CreatedInvitation extends Invitation {
+  /** Path of the invitation link (relative to the optik URL) — shown only once */
+  invitePath: string;
+}
+
 export interface Project {
   id: string;
   name: string;
   slug: string;
+  /** Branch whose baselines other branches fall back to (default "main") */
+  defaultBranch: string;
+  /** Adapters fail tests on visual changes (off when a commit status reports them) */
+  failTestsOnChanges: boolean;
+  /** GitHub repository ("owner/repo") that gets commit statuses, if configured */
+  githubRepo: string | null;
+  /** GitHub Enterprise Server API URL; null for github.com */
+  githubApiUrl: string | null;
+  /** Whether a GitHub token is stored — the token itself is never returned */
+  githubTokenConfigured: boolean;
+  /** The signed-in user's role in this project */
+  myRole: EffectiveProjectRole;
   createdAt: string;
 }
 
@@ -10,6 +67,8 @@ export interface Run {
   projectId: string;
   projectSlug: string;
   branch: string;
+  /** Test suite that produced the run, e.g. "vitest" or "playwright" */
+  suite: string;
   commitSha: string;
   /** Latest commit when later runs without changes were merged into this one. */
   lastCommitSha: string | null;
@@ -36,6 +95,20 @@ export interface Snapshot {
   baselineId: string | null;
   diffScore: number | null;
   createdAt: string;
+  /** Signed, expiring URL of the screenshot (relative to the server) */
+  imageUrl: string;
+  /** Signed URL of the baseline's screenshot, if there is a baseline */
+  baselineImageUrl: string | null;
+  /** Signed URL of the diff image, for snapshots that differ from their baseline */
+  diffUrl: string | null;
+  /**
+   * Set when the change was accepted automatically because the same image was
+   * already approved — the id of that approved snapshot.
+   */
+  autoApprovedFromId: string | null;
+  /** Who accepted or rejected the change, and when */
+  reviewedBy: string | null;
+  reviewedAt: string | null;
 }
 
 /**
@@ -51,22 +124,53 @@ export type SnapshotStatus = 'new' | 'unchanged' | 'pending' | 'approved' | 'rej
 export interface SubmittedSnapshot extends Snapshot {
   /** Path of the review page in the web UI, relative to the optik server URL. */
   reviewPath: string;
+  /**
+   * Whether the adapter should fail the test: the snapshot needs review and
+   * the project lets tests fail on changes (see Project.failTestsOnChanges).
+   */
+  failTest: boolean;
 }
 
 export interface CreateProjectDto {
   name: string;
   slug: string;
+  defaultBranch?: string;
+}
+
+export interface UpdateProjectDto {
+  defaultBranch?: string;
+  failTestsOnChanges?: boolean;
+  /** "owner/repo"; empty string disables commit statuses */
+  githubRepo?: string;
+  /** Empty string for github.com */
+  githubApiUrl?: string;
+  /** Write-only; empty string removes the stored token */
+  githubToken?: string;
 }
 
 export interface CreateRunDto {
   branch: string;
   commitSha: string;
+  /**
+   * Test suite, e.g. "vitest" or "playwright". Runs are merged and baselines
+   * are kept per suite. Defaults to "default".
+   */
+  suite?: string;
+  /**
+   * The commit and its git ancestors, newest first. Baselines come from runs
+   * on these commits, which keeps accepted changes on their branch until merged.
+   */
+  ancestors?: string[];
+  /** optik URL as the adapter reaches it — used for links in commit statuses */
+  serverUrl?: string;
 }
 
 export interface ApiToken {
   id: string;
   projectId: string;
   name: string;
+  /** First characters of the token (e.g. "optik_3f9a1c"); the full token is only shown on creation. */
+  prefix: string;
   expiresAt: string | null;
   createdAt: string;
 }

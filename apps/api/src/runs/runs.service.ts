@@ -1,11 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ProjectsService } from '../projects/projects.service';
+import { CommitStatusService } from '../ci/commit-status.service';
+import { AccessService, CurrentUser } from '../access/access.service';
 import type { Run, CreateRunDto } from '@optik/shared';
 import type { Run as PrismaRun, Snapshot as PrismaSnapshot } from '@prisma/client';
 
 /** Snapshot statuses that mean the run had a visual change. */
 const CHANGE_STATUSES = ['pending', 'approved', 'rejected'];
+
+/** Suite of runs created before suites existed — other suites fall back to its baselines. */
+export const DEFAULT_SUITE = 'default';
+
+const SUITE_PATTERN = /^[A-Za-z0-9._/-]{1,64}$/;
+const COMMIT_PATTERN = /^[0-9a-f]{7,64}$/i;
+const MAX_ANCESTORS = 1000;
 
 const INCLUDE = {
   project: { select: { slug: true } },
@@ -24,10 +33,12 @@ export class RunsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly projectsService: ProjectsService,
+    private readonly commitStatus: CommitStatusService,
+    private readonly access: AccessService,
   ) {}
 
-  async findByProject(projectSlug: string): Promise<Run[]> {
-    const project = await this.projectsService.findBySlug(projectSlug);
+  async findByProject(user: CurrentUser, projectSlug: string): Promise<Run[]> {
+    const { project } = await this.access.requireProject(user, { slug: projectSlug }, 'viewer');
     const rows = await this.prisma.run.findMany({
       where: { projectId: project.id },
       include: INCLUDE,
@@ -45,18 +56,51 @@ export class RunsService {
     return toDto(row);
   }
 
+  /** Readable by viewers of the run's project. */
+  async findVisible(user: CurrentUser, id: string): Promise<Run> {
+    await this.access.requireRun(user, id, 'viewer');
+    return this.findById(id);
+  }
+
   async create(projectSlug: string, dto: CreateRunDto): Promise<Run> {
-    const project = await this.projectsService.findBySlug(projectSlug);
+    const project = { id: await this.projectsService.idBySlug(projectSlug) };
+    const suite = dto.suite?.trim() || DEFAULT_SUITE;
+    if (!SUITE_PATTERN.test(suite)) {
+      throw new BadRequestException(
+        'suite must be 1–64 characters: letters, digits, ".", "_", "/" or "-"',
+      );
+    }
+    const ancestors = dto.ancestors ?? [];
+    if (
+      !Array.isArray(ancestors) ||
+      ancestors.length > MAX_ANCESTORS ||
+      !ancestors.every((sha) => typeof sha === 'string' && COMMIT_PATTERN.test(sha))
+    ) {
+      throw new BadRequestException(`ancestors must be up to ${MAX_ANCESTORS} commit SHAs`);
+    }
+    // The run's own commit counts too: e.g. a re-run after accepting a change
+    const commits = COMMIT_PATTERN.test(dto.commitSha ?? '')
+      ? [dto.commitSha, ...ancestors.filter((sha) => sha !== dto.commitSha)]
+      : ancestors;
+
     const row = await this.prisma.run.create({
-      data: { projectId: project.id, branch: dto.branch, commitSha: dto.commitSha },
+      data: {
+        projectId: project.id,
+        branch: dto.branch,
+        commitSha: dto.commitSha,
+        suite,
+        ancestors: commits,
+        serverUrl: validUrl(dto.serverUrl),
+      },
       include: INCLUDE,
     });
+    await this.commitStatus.reportRun(row.id);
     return toDto(row);
   }
 
   /**
    * Marks a run complete. A run whose snapshots are all `unchanged` is merged
-   * into the previous run of the same branch if that one had no visual changes
+   * into the previous run of the same suite and branch if that one had no visual changes
    * either: the new run is deleted and the previous one gets a bumped
    * `updatedAt`, `runCount` and `lastCommitSha`. Returns the run that remains.
    */
@@ -69,6 +113,10 @@ export class RunsService {
 
     const target = await this.findMergeTarget(run);
     if (target) {
+      // The merged run disappears, but its commit still needs a (green) status
+      const project = await this.prisma.project.findUniqueOrThrow({ where: { id: run.projectId } });
+      await this.commitStatus.report({ ...run, project }, 'success', 'No visual changes', target.id);
+
       const [, , merged] = await this.prisma.$transaction([
         this.prisma.snapshot.deleteMany({ where: { runId: id } }),
         this.prisma.run.delete({ where: { id } }),
@@ -86,6 +134,7 @@ export class RunsService {
       data: { status: 'complete' },
       include: INCLUDE,
     });
+    await this.commitStatus.reportRun(id);
     return toDto(row);
   }
 
@@ -97,6 +146,7 @@ export class RunsService {
     const previous = await this.prisma.run.findFirst({
       where: {
         projectId: run.projectId,
+        suite: run.suite,
         branch: run.branch,
         createdAt: { lt: run.createdAt },
       },
@@ -111,12 +161,24 @@ export class RunsService {
   }
 }
 
+/** The optik URL the adapter used, if it is a plain http(s) URL. */
+function validUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
 function toDto(r: RunWithCounts): Run {
   return {
     id: r.id,
     projectId: r.projectId,
     projectSlug: r.project.slug,
     branch: r.branch,
+    suite: r.suite,
     commitSha: r.commitSha,
     lastCommitSha: r.lastCommitSha,
     status: r.status as Run['status'],

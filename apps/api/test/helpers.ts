@@ -116,6 +116,21 @@ export class AdminClient {
     return call(`${this.api}/runs/${id}`, { token: this.jwt });
   }
 
+  /** Invites `email` and accepts the invitation; returns the new user's client. */
+  async inviteUser(
+    email: string,
+    opts: { role?: 'admin' | 'member'; projectSlug?: string; projectRole?: string } = {},
+  ): Promise<AdminClient> {
+    const invite = await call(`${this.api}/invitations`, { token: this.jwt, json: { email, ...opts } });
+    if (invite.status !== 201) throw new Error(`invite failed: ${invite.status}`);
+    const token = invite.body.invitePath.split('/').pop();
+    const accepted = await call(`${this.api}/invitations/token/${token}/accept`, {
+      json: { password: 'correct-horse' },
+    });
+    if (accepted.status !== 201) throw new Error(`accept failed: ${accepted.status}`);
+    return new AdminClient(this.api, accepted.body.accessToken);
+  }
+
   runs(slug: string) {
     return call(`${this.api}/runs?project=${slug}`, { token: this.jwt });
   }
@@ -128,8 +143,11 @@ export class AdapterClient {
     private readonly token: string,
   ) {}
 
-  startRun(branch = 'main', commitSha = 'abc1234') {
-    return call(`${this.api}/runs`, { token: this.token, json: { branch, commitSha } });
+  startRun(branch = 'main', commitSha = 'abc1234', suite?: string, ancestors?: string[]) {
+    return call(`${this.api}/runs`, {
+      token: this.token,
+      json: { branch, commitSha, suite, ancestors },
+    });
   }
 
   submit(runId: string, name: string, image: Buffer) {
@@ -145,8 +163,13 @@ export class AdapterClient {
   }
 
   /** A whole run: start, submit the given snapshots, complete. */
-  async fullRun(snapshots: Record<string, Buffer>, branch = 'main', commitSha = 'abc1234') {
-    const run = (await this.startRun(branch, commitSha)).body;
+  async fullRun(
+    snapshots: Record<string, Buffer>,
+    branch = 'main',
+    commitSha = 'abc1234',
+    suite?: string,
+  ) {
+    const run = (await this.startRun(branch, commitSha, suite)).body;
     const results: Record<string, any> = {};
     for (const [name, image] of Object.entries(snapshots)) {
       results[name] = (await this.submit(run.id, name, image)).body;

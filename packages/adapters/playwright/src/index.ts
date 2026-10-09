@@ -13,6 +13,16 @@ export interface OptikConfig {
   token: string
   /** Override the Optik server URL. Defaults to OPTIK_SERVER_URL env var or http://localhost:3000 */
   serverUrl?: string
+  /**
+   * Name of this test suite. Runs are merged and baselines are kept per suite,
+   * so give each Playwright config of a project its own name. Defaults to "playwright".
+   */
+  suite?: string
+  /**
+   * Fail tests on visual changes. Defaults to the project setting — turn it off
+   * there when changes are reported as a commit status instead.
+   */
+  failOnChanges?: boolean
 }
 
 /**
@@ -27,6 +37,10 @@ export function optikConfig(config: OptikConfig) {
   // Set in env so global-setup.ts and worker fixtures can read the values.
   // Workers inherit env vars from the main process, which is why this works.
   process.env._OPTIK_TOKEN = config.token
+  process.env._OPTIK_SUITE = config.suite ?? "playwright"
+  if (config.failOnChanges !== undefined) {
+    process.env._OPTIK_FAIL_ON_CHANGES = String(config.failOnChanges)
+  }
   if (config.serverUrl) {
     process.env._OPTIK_SERVER_URL = config.serverUrl
   }
@@ -94,7 +108,13 @@ export const test = base.extend<{ optik: OptikFixture }>({
         }
 
         const result = (await res.json()) as SubmittedSnapshot
-        if (result.status === "pending") {
+        // The adapter option wins, then the server's decision (project setting)
+        const override = process.env._OPTIK_FAIL_ON_CHANGES
+        const fail =
+          override !== undefined
+            ? override === "true" && result.status === "pending"
+            : (result.failTest ?? result.status === "pending")
+        if (fail) {
           throw new Error(
             `Visual snapshot "${name}" differs from the approved baseline ` +
               `(${((result.diffScore ?? 0) * 100).toFixed(2)}% of pixels changed).\n` +

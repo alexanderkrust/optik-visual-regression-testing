@@ -8,6 +8,16 @@ export interface OptikConfig {
   token: string
   /** Override the Optik server URL. Defaults to OPTIK_SERVER_URL env var or http://localhost:3000 */
   serverUrl?: string
+  /**
+   * Name of this test suite. Runs are merged and baselines are kept per suite,
+   * so give each Vitest config of a project its own name. Defaults to "vitest".
+   */
+  suite?: string
+  /**
+   * Fail tests on visual changes. Defaults to the project setting — turn it off
+   * there when changes are reported as a commit status instead.
+   */
+  failOnChanges?: boolean
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -52,6 +62,10 @@ export function optik(config: OptikConfig) {
         )
       }
       process.env._OPTIK_TOKEN = config.token
+      process.env._OPTIK_SUITE = config.suite ?? "vitest"
+      if (config.failOnChanges !== undefined) {
+        process.env._OPTIK_FAIL_ON_CHANGES = String(config.failOnChanges)
+      }
       if (config.serverUrl) {
         process.env._OPTIK_SERVER_URL = config.serverUrl
       }

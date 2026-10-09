@@ -130,6 +130,13 @@ describe('snapshot comparison and review', () => {
       expect((await admin.review(same.id, 'rejected')).status).toBe(400);
     });
 
+    it('only accepts "approved" or "rejected"', async () => {
+      await snapshot(WHITE);
+      const changed = await snapshot(BLACK);
+      expect((await admin.review(changed.id, 'pending' as any)).status).toBe(400);
+      expect((await admin.review(changed.id, undefined as any)).status).toBe(400);
+    });
+
     it('requires a signed-in user', async () => {
       await snapshot(WHITE);
       const changed = await snapshot(BLACK);
@@ -142,23 +149,59 @@ describe('snapshot comparison and review', () => {
   });
 
   describe('images', () => {
-    const image = (id: string, kind: 'image' | 'diff' = 'image') =>
-      call<Buffer>(`${t.api}/snapshots/${id}/${kind}`);
+    /** Signed URLs in the DTOs are relative to the server (they start with /api). */
+    const fetchUrl = (url: string, token?: string) =>
+      call<Buffer>(new URL(url, t.api).toString(), { token });
+    const unsigned = (id: string, kind: 'image' | 'diff' = 'image', token?: string) =>
+      call<Buffer>(`${t.api}/snapshots/${id}/${kind}`, { token });
 
-    it('serves the screenshot and, for changes, the diff', async () => {
+    it('serves the screenshot, the baseline and, for changes, the diff via signed URLs', async () => {
       const first = await snapshot(WHITE);
       const changed = await snapshot(BLACK);
+      expect(first.diffUrl).toBeNull();
 
-      const img = await image(changed.id);
+      const img = await fetchUrl(changed.imageUrl);
       expect(img.status).toBe(200);
       expect(img.headers.get('content-type')).toBe('image/png');
       expect(img.body.equals(BLACK)).toBe(true);
 
-      const diff = await image(changed.id, 'diff');
+      expect((await fetchUrl(changed.baselineImageUrl)).body.equals(WHITE)).toBe(true);
+
+      const diff = await fetchUrl(changed.diffUrl);
       expect(diff.status).toBe(200);
       expect(PNG.sync.read(diff.body).width).toBe(10);
+    });
 
-      expect((await image(first.id, 'diff')).status).toBe(404);
+    it('keeps images private without a valid signature or sign-in', async () => {
+      await snapshot(WHITE);
+      const changed = await snapshot(BLACK);
+      const other = await snapshot(GRAY);
+
+      expect((await unsigned(changed.id)).status).toBe(401);
+      expect((await unsigned(changed.id, 'diff')).status).toBe(401);
+
+      // A signature only fits its own snapshot and kind
+      const query = new URL(changed.imageUrl, t.api).search;
+      expect((await fetchUrl(`/api/snapshots/${other.id}/image${query}`)).status).toBe(401);
+      expect((await fetchUrl(`/api/snapshots/${changed.id}/diff${query}`)).status).toBe(401);
+      expect((await fetchUrl(changed.imageUrl.replace(/signature=./, 'signature=x'))).status).toBe(401);
+
+      // Project tokens are for adapters, not for reading images
+      expect((await unsigned(changed.id, 'image', (adapter as any).token)).status).toBe(401);
+    });
+
+    it('also serves images to signed-in users (JWT)', async () => {
+      await snapshot(WHITE);
+      const changed = await snapshot(BLACK);
+      expect((await unsigned(changed.id, 'image', admin.jwt)).status).toBe(200);
+    });
+
+    it('returns fresh signed URLs after a review', async () => {
+      await snapshot(WHITE);
+      const changed = await snapshot(BLACK);
+      const reviewed = (await admin.review(changed.id, 'approved')).body;
+      expect((await fetchUrl(reviewed.imageUrl)).status).toBe(200);
+      expect((await fetchUrl(reviewed.diffUrl)).status).toBe(200);
     });
 
     it('serves the baseline image for unchanged snapshots without storing a copy', async () => {
@@ -166,7 +209,7 @@ describe('snapshot comparison and review', () => {
       const same = await snapshotInOpenRun(WHITE);
       expect(same.status).toBe('unchanged');
 
-      const img = await image(same.id);
+      const img = await fetchUrl(same.imageUrl);
       expect(img.status).toBe(200);
       expect(img.body.equals(WHITE)).toBe(true);
 
@@ -175,7 +218,7 @@ describe('snapshot comparison and review', () => {
     });
 
     it('returns 404 for unknown snapshots', async () => {
-      expect((await image('00000000-0000-0000-0000-000000000000')).status).toBe(404);
+      expect((await unsigned('00000000-0000-0000-0000-000000000000', 'image', admin.jwt)).status).toBe(404);
     });
   });
 

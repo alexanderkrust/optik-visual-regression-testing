@@ -1,21 +1,23 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../database/prisma.service';
 import type {
   ApiToken,
   CreateApiTokenDto,
   CreatedApiTokenDto,
 } from '@optik/shared';
+import type { ApiToken as TokenRow } from '@prisma/client';
 
-// expiresAt is optional so this compiles against both the stale and regenerated Prisma client
-type TokenRow = {
-  id: string;
-  projectId: string;
-  name: string;
-  token?: string;
-  expiresAt?: Date | null;
-  createdAt: Date;
-};
+/** Visible part of a token, e.g. "optik_3f9a1c" — enough to recognise it. */
+const PREFIX_LENGTH = 12;
+
+/**
+ * Tokens are 256-bit random values, so a fast hash is enough: there is nothing
+ * to brute-force. Only the hash is stored; the token is shown once on creation.
+ */
+export function hashToken(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
 
 @Injectable()
 export class TokensService {
@@ -26,7 +28,7 @@ export class TokensService {
       where: { project: { slug: projectSlug } },
       orderBy: { createdAt: 'desc' },
     });
-    return (rows as TokenRow[]).map(toDto);
+    return rows.map(toDto);
   }
 
   async create(
@@ -38,16 +40,17 @@ export class TokensService {
     });
     if (!project)
       throw new NotFoundException(`Project "${projectSlug}" not found`);
+
     const rawToken = `optik_${randomBytes(32).toString('hex')}`;
-    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
-    const row = (await this.prisma.apiToken.create({
+    const row = await this.prisma.apiToken.create({
       data: {
         projectId: project.id,
         name: dto.name,
-        token: rawToken,
-        ...(expiresAt ? { expiresAt } : {}),
-      } as any,
-    })) as TokenRow;
+        tokenHash: hashToken(rawToken),
+        tokenPrefix: rawToken.slice(0, PREFIX_LENGTH),
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+      },
+    });
     return { ...toDto(row), token: rawToken };
   }
 
@@ -62,10 +65,10 @@ export class TokensService {
   async findByToken(
     token: string,
   ): Promise<{ projectId: string; projectSlug: string } | null> {
-    const row = (await this.prisma.apiToken.findUnique({
-      where: { token },
+    const row = await this.prisma.apiToken.findUnique({
+      where: { tokenHash: hashToken(token) },
       include: { project: { select: { slug: true } } },
-    })) as (TokenRow & { project: { slug: string } }) | null;
+    });
     if (!row) return null;
     if (row.expiresAt && row.expiresAt < new Date()) return null;
     return { projectId: row.projectId, projectSlug: row.project.slug };
@@ -77,6 +80,7 @@ function toDto(r: TokenRow): ApiToken {
     id: r.id,
     projectId: r.projectId,
     name: r.name,
+    prefix: r.tokenPrefix,
     expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
   };

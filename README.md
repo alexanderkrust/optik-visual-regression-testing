@@ -80,6 +80,13 @@ docker compose up -d
 
 For Kubernetes, `INSTALL.md` explains how to copy the images into an internal registry and install the chart from the bundle.
 
+### Security
+
+- **Images are private.** The API returns signed, expiring image URLs (1–2 h) with every snapshot; image endpoints accept only those or a signed-in user's JWT.
+- **API tokens are stored hashed** (SHA-256); the full token is shown once on creation, the UI shows its prefix.
+- **Failed sign-ins are limited per account** (`LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES`), counted in memory per instance.
+- **Security headers**: Content-Security-Policy for the web UI, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS over HTTPS.
+
 ### Verifying releases
 
 Every release image and Helm chart is signed with [cosign](https://github.com/sigstore/cosign) (keyless, via GitHub Actions OIDC) and comes with an SPDX SBOM — as a registry attestation and as a release asset.
@@ -104,7 +111,59 @@ For working on optik itself see [DEVELOPMENT.md](DEVELOPMENT.md); for what's pla
 
 ## How reviews work
 
-Every snapshot is compared pixel by pixel with its **baseline** — the most recently accepted snapshot of the same name in the project.
+Every snapshot is compared pixel by pixel with its **baseline** — the most recently accepted snapshot of the same name in the same **test suite**, found through the git history (see [Branches](#branches)).
+
+### Branches
+
+The adapters send the commit and its git ancestors with every run. The baseline is the latest accepted snapshot from a run on one of these commits, so — like in Chromatic:
+
+- a feature branch compares against the state it was branched from, not against later changes on `main`;
+- accepting a change on a branch affects only that branch;
+- a **merge commit** carries the branch's accepted changes over to `main`;
+- after a **squash or rebase merge** the history is lost — so a snapshot that is pixel-identical to an already approved one is **accepted automatically** (shown as such in the UI) instead of asking for a second review.
+
+**Fetch the git history in CI.** Most CI systems clone shallowly; with GitHub Actions use:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+```
+
+Without history, optik falls back to the latest accepted snapshot on the same branch, then on the project's **default branch** (`main` unless changed under *Project → Settings*).
+
+The branch is detected from the CI system (GitHub Actions, GitLab CI, Bitbucket Pipelines) or git; set `OPTIK_BRANCH` / `OPTIK_COMMIT` to override.
+
+### Users and roles
+
+The first account (setup page) is an **admin**. Admins invite people under *Users* — optionally straight into a project — and send them the invitation link (valid for 7 days); the invited person chooses a password and is signed in.
+
+| Role | Can |
+|---|---|
+| **admin** (instance) | everything: manage users, create projects, access every project |
+| **member** (instance) | only the projects they are a member of |
+| **viewer** (project) | see runs, snapshots and images |
+| **reviewer** (project) | + accept and reject changes |
+| **maintainer** (project) | + manage members, access tokens and settings |
+
+Projects a user can't access don't exist for them (`404`). Role changes and removed accounts take effect immediately. Every review records who made it; removing a user keeps their reviews.
+
+### Commit status on GitHub
+
+optik reports every run as a commit status — `optik/<suite>: 2 visual changes to review`, linking to the review page — and updates it when changes are accepted or rejected. **The check turns green without re-running CI.**
+
+1. Create a token that may write commit statuses: a fine-grained personal access token with *Commit statuses: Read and write* for the repository (or a classic token with `repo:status`).
+2. In optik: *Project → Settings → GitHub commit status* — repository (`owner/repo`), token, and for GitHub Enterprise Server the API URL (`https://github.example.com/api/v3`). The token is stored encrypted and never shown again.
+3. Turn off *Fail tests on visual changes* in the same place, so CI stays green and the status shows what needs review.
+4. In GitHub, make the `optik/<suite>` status a **required check** in the branch protection rules — merging then waits for the review.
+
+Statuses go to the tested commit; for pull requests the adapters report on the PR's head commit. Links use the optik URL the adapters reach (`OPTIK_SERVER_URL`); set `PUBLIC_URL` on the server if users open optik under a different address.
+
+### Test suites
+
+Each run belongs to a suite: `vitest` and `playwright` by default, configurable with the adapters' `suite` option. Baselines and run merging are per suite, so a project can have component and page tests with equal snapshot names, or several Playwright configs, without them interfering. Give every test config of a project its own suite name.
+
+Runs from before suites existed are in the `default` suite. Other suites fall back to its baselines until they have their own, so existing reviews carry over.
 
 | Result | Status | Test |
 |--------|--------|------|
@@ -121,7 +180,7 @@ An unreviewed change keeps failing in later runs as well.
 
 ### Runs without changes are merged
 
-Only runs that matter for review are kept. When a run finishes and all its snapshots are `unchanged`, it is merged into the previous run of the same branch — as long as that one had no visual changes either. The new run is not stored; the previous one gets its *last run* time (`updatedAt`), a run counter and the latest commit updated. Images of unchanged snapshots are never stored, since they equal the baseline.
+Only runs that matter for review are kept. When a run finishes and all its snapshots are `unchanged`, it is merged into the previous run of the same suite and branch — as long as that one had no visual changes either. The new run is not stored; the previous one gets its *last run* time (`updatedAt`), a run counter and the latest commit updated. Images of unchanged snapshots are never stored, since they equal the baseline.
 
 So the run list shows: one entry per stretch of clean runs, every run with changes, and — after a change was reviewed — the next clean run as a new entry again.
 
@@ -148,6 +207,8 @@ export default defineConfig({
     optik({
       token: process.env.OPTIK_TOKEN!,     // project-scoped API token from the UI
       serverUrl: 'https://optik.example.com', // URL of your optik instance, defaults to OPTIK_SERVER_URL or http://localhost:3000
+    suite: 'e2e',                           // optional, defaults to "playwright"
+      suite: 'components',                // optional, defaults to "vitest"
     }),
   ],
   test: {
@@ -263,6 +324,23 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/auth/refresh` | Exchange refresh token for a new access token |
 | POST | `/api/auth/logout` | Revoke refresh token |
 
+### Users (JWT required)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/auth/me` | The signed-in user incl. role |
+| GET | `/api/users` | List users (admin) |
+| PATCH | `/api/users/:id` | Change a user's role (admin) |
+| DELETE | `/api/users/:id` | Remove a user (admin) |
+| POST | `/api/invitations` | Invite by email, optionally into a project (admin) |
+| GET | `/api/invitations` | Pending invitations (admin) |
+| DELETE | `/api/invitations/:id` | Revoke an invitation (admin) |
+| GET | `/api/invitations/token/:token` | Look up an invitation link (public) |
+| POST | `/api/invitations/token/:token/accept` | Set a password and sign in (public) |
+| GET | `/api/projects/:slug/members` | Project members (maintainer) |
+| PUT | `/api/projects/:slug/members` | Add an existing user / change their role (maintainer) |
+| DELETE | `/api/projects/:slug/members/:userId` | Remove a member (maintainer) |
+
 ### Projects & runs (JWT required)
 
 | Method | Path | Description |
@@ -275,6 +353,8 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/projects/:slug/tokens` | Create an API token |
 | DELETE | `/api/projects/:slug/tokens/:id` | Revoke an API token |
 | PATCH | `/api/snapshots/:id/status` | Accept (`approved`) or reject (`rejected`) a visual change |
+| GET | `/api/projects/:slug` | Get a project |
+| PATCH | `/api/projects/:slug` | Update project settings (`defaultBranch`) |
 
 ### Adapter endpoints (API token required)
 
@@ -283,8 +363,8 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/runs` | Start a new run |
 | POST | `/api/runs/:id/complete` | Mark run complete |
 | POST | `/api/snapshots` | Submit a screenshot |
-| GET | `/api/snapshots/:id/image` | Serve PNG |
-| GET | `/api/snapshots/:id/diff` | Serve diff PNG |
+| GET | `/api/snapshots/:id/image` | Serve PNG — signed URL (`imageUrl` in the snapshot) or JWT |
+| GET | `/api/snapshots/:id/diff` | Serve diff PNG — signed URL (`diffUrl`) or JWT |
 
 ---
 
@@ -307,10 +387,13 @@ Only `DATABASE_URL` is required. Every variable also accepts a `<NAME>_FILE` var
 | `SESSION_SECRET` | generated | Secret for encrypting the session cookie |
 | `JWT_ACCESS_EXPIRES` | `15m` | Access token lifetime |
 | `JWT_REFRESH_EXPIRES` | `7d` | Refresh token lifetime |
+| `LOGIN_MAX_FAILURES` | `10` | Failed sign-ins per account before it is temporarily blocked |
+| `LOGIN_LOCKOUT_MINUTES` | `15` | Time window for failed sign-ins (and maximum block duration) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Create the admin account on start instead of the setup page (automated installs) |
+| `PUBLIC_URL` | URL the adapters use | Public URL of optik for links in commit statuses |
 | `ORIGIN` | derived from request | Public URL, only needed if a reverse proxy doesn't send `X-Forwarded-Proto` / `X-Forwarded-Host` |
 
-Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL of your optik instance.
+Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL of your optik instance — and optionally `OPTIK_BRANCH` / `OPTIK_COMMIT` to override the detected branch and commit.
 
 ---
 

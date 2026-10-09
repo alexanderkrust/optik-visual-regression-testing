@@ -16,6 +16,7 @@
   import { today, getLocalTimeZone } from '@internationalized/date';
   import type { DateValue } from '@internationalized/date';
   import { Badge } from '$lib/components/ui/badge';
+  import { Separator } from '$lib/components/ui/separator';
   import { Button } from '$lib/components/ui/button';
   import { Card, CardContent } from '$lib/components/ui/card';
   import { Input } from '$lib/components/ui/input';
@@ -63,6 +64,9 @@
     if (run.changedCount > 0) return { label: 'reviewed', variant: 'success' };
     return { label: 'passed', variant: 'success' };
   }
+
+  const selectClass =
+    'h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
 
   let activeTab = $state('runs');
 
@@ -167,12 +171,16 @@
 <Tabs bind:value={activeTab}>
   <TabsList class="mb-6">
     <TabsTrigger value="runs">Runs</TabsTrigger>
-    <TabsTrigger value="tokens">Access Tokens</TabsTrigger>
+    {#if data.manages}
+      <TabsTrigger value="members">Members</TabsTrigger>
+      <TabsTrigger value="tokens">Access Tokens</TabsTrigger>
+      <TabsTrigger value="settings">Settings</TabsTrigger>
+    {/if}
   </TabsList>
 
   <!-- Runs tab -->
   <TabsContent value="runs">
-    {#if !hasValidToken}
+    {#if data.manages && !hasValidToken}
       <div class="mb-4 flex items-start gap-3 rounded-md border bg-muted px-4 py-3 text-sm text-foreground">
         <Key class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <span>
@@ -198,6 +206,7 @@
           <TableHeader>
             <TableRow>
               <TableHead>Branch</TableHead>
+              <TableHead>Suite</TableHead>
               <TableHead>Commit</TableHead>
               <TableHead class="text-center">Snapshots</TableHead>
               <TableHead class="text-center">Changes</TableHead>
@@ -216,6 +225,9 @@
                     <GitBranch class="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     {run.branch}
                   </span>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" class="font-mono text-xs">{run.suite}</Badge>
                 </TableCell>
                 <TableCell>
                   <span class="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
@@ -416,6 +428,7 @@
                 <TableCell class="font-medium">
                   <span class="flex items-center gap-2">
                     {token.name}
+                    <span class="font-mono text-xs text-muted-foreground">{token.prefix}…</span>
                     {#if expired}
                       <Badge variant="destructive" class="text-xs">expired</Badge>
                     {/if}
@@ -450,6 +463,152 @@
         </Table>
       </Card>
     {/if}
+  </TabsContent>
+
+  <!-- Members tab -->
+  <TabsContent value="members">
+    <Card class="mb-4">
+      <CardContent class="p-6">
+        <form method="POST" action="?/setMember" use:enhance class="flex flex-wrap items-end gap-3">
+          <div class="flex flex-col gap-1.5 flex-1 min-w-56">
+            <Label for="member-email">Add a user</Label>
+            <Input id="member-email" name="email" type="email" required placeholder="jane@example.com" />
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <Label for="member-role">Role</Label>
+            <select id="member-role" name="role" class={selectClass}>
+              <option value="viewer">Viewer</option>
+              <option value="reviewer">Reviewer</option>
+              <option value="maintainer">Maintainer</option>
+            </select>
+          </div>
+          <Button type="submit" size="sm">Add</Button>
+        </form>
+        {#if form && 'memberError' in form}
+          <p class="mt-3 text-sm text-destructive">{(form as { memberError: string }).memberError}</p>
+        {/if}
+        <p class="mt-3 text-xs text-muted-foreground">
+          Viewers see runs, reviewers also accept and reject changes, maintainers also manage
+          members, tokens and settings. Admins can access every project. New people are invited
+          under <em>Users</em> (admins).
+        </p>
+      </CardContent>
+    </Card>
+
+    {#if data.members.length > 0}
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Email</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead class="w-12"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {#each data.members as member (member.userId)}
+              <TableRow>
+                <TableCell class="font-medium">{member.email}</TableCell>
+                <TableCell>
+                  <form method="POST" action="?/setMember" use:enhance>
+                    <input type="hidden" name="email" value={member.email} />
+                    <select
+                      name="role"
+                      class={selectClass}
+                      value={member.role}
+                      onchange={(e) => e.currentTarget.form?.requestSubmit()}
+                    >
+                      <option value="viewer">Viewer</option>
+                      <option value="reviewer">Reviewer</option>
+                      <option value="maintainer">Maintainer</option>
+                    </select>
+                  </form>
+                </TableCell>
+                <TableCell>
+                  <form method="POST" action="?/removeMember" use:enhance>
+                    <input type="hidden" name="userId" value={member.userId} />
+                    <Button type="submit" variant="ghost" size="sm" aria-label="Remove {member.email}">
+                      <Trash2 class="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </form>
+                </TableCell>
+              </TableRow>
+            {/each}
+          </TableBody>
+        </Table>
+      </Card>
+    {/if}
+  </TabsContent>
+
+  <!-- Settings tab -->
+  <TabsContent value="settings">
+    <Card>
+      <CardContent class="p-6">
+        <form method="POST" action="?/updateSettings" use:enhance class="space-y-4 max-w-md">
+          <div class="space-y-1.5">
+            <Label for="default-branch">Default branch</Label>
+            <Input
+              id="default-branch"
+              name="defaultBranch"
+              value={data.project.defaultBranch}
+              class="font-mono"
+              required
+            />
+            <p class="text-xs text-muted-foreground">
+              Baselines come from the git history of each run. When a run has no usable history
+              (e.g. a shallow clone in CI), optik falls back to its own branch and then to this one.
+            </p>
+          </div>
+
+          <Separator />
+
+          <div class="space-y-1">
+            <h3 class="text-sm font-semibold">GitHub commit status</h3>
+            <p class="text-xs text-muted-foreground">
+              Each run reports a status (<code>optik/&lt;suite&gt;</code>) with a link to the review.
+              It turns green once all changes are accepted — no need to re-run CI.
+            </p>
+          </div>
+          <div class="space-y-1.5">
+            <Label for="github-repo">Repository</Label>
+            <Input id="github-repo" name="githubRepo" value={data.project.githubRepo ?? ''} placeholder="owner/repo" class="font-mono" />
+          </div>
+          <div class="space-y-1.5">
+            <Label for="github-token">Token</Label>
+            <Input
+              id="github-token"
+              name="githubToken"
+              type="password"
+              autocomplete="off"
+              placeholder={data.project.githubTokenConfigured ? 'Stored — leave empty to keep' : 'Fine-grained token with "Commit statuses: write"'}
+            />
+          </div>
+          <div class="space-y-1.5">
+            <Label for="github-api-url">API URL <span class="font-normal text-muted-foreground">(GitHub Enterprise Server only)</span></Label>
+            <Input id="github-api-url" name="githubApiUrl" value={data.project.githubApiUrl ?? ''} placeholder="https://github.example.com/api/v3" class="font-mono" />
+          </div>
+
+          <Separator />
+
+          <label class="flex items-start gap-2 text-sm">
+            <input type="checkbox" name="failTestsOnChanges" checked={data.project.failTestsOnChanges} class="mt-1" />
+            <span>
+              Fail tests on visual changes
+              <span class="block text-xs text-muted-foreground">
+                Turn off when the commit status blocks merging — CI then stays green and the status
+                shows what needs review. Adapters can override this with <code>failOnChanges</code>.
+              </span>
+            </span>
+          </label>
+          {#if form && 'settingsError' in form}
+            <p class="text-sm text-destructive">{(form as { settingsError: string }).settingsError}</p>
+          {:else if form && 'settingsSaved' in form}
+            <p class="text-sm text-green-700">Saved.</p>
+          {/if}
+          <Button type="submit" size="sm">Save</Button>
+        </form>
+      </CardContent>
+    </Card>
   </TabsContent>
 </Tabs>
 
