@@ -5,13 +5,22 @@ import { DEFAULT_SUITE } from '../runs/runs.service';
 import { CommitStatusService } from '../ci/commit-status.service';
 import { AccessService, CurrentUser } from '../access/access.service';
 
-const WITH_REVIEWER = { reviewedBy: { select: { email: true } } } as const;
-type SnapshotRow = PrismaSnapshot & { reviewedBy?: { email: string } | null };
+const WITH_REVIEWER = {
+  reviewedBy: { select: { email: true } },
+  _count: { select: { comments: true } },
+} as const;
+type SnapshotRow = PrismaSnapshot & {
+  reviewedBy?: { email: string } | null;
+  _count?: { comments: number };
+};
 import { StorageService } from '../storage/storage.service';
+import { diffKey, imageKey } from './storage-keys';
 import { DiffService } from '../diff/diff.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import type {
+  IgnoreRegion,
   Snapshot,
+  SnapshotSettings,
   SnapshotStatus,
   SubmittedSnapshot,
   UpdateSnapshotStatusDto,
@@ -27,6 +36,9 @@ const UNKNOWN_BRANCH = 'unknown';
 
 const BASELINE_STATUSES: SnapshotStatus[] = ['new', 'approved'];
 
+const DEFAULT_SETTINGS: SnapshotSettings = { ignoreRegions: [], threshold: 0 };
+const MAX_REGIONS = 50;
+
 @Injectable()
 export class SnapshotsService {
   constructor(
@@ -41,12 +53,17 @@ export class SnapshotsService {
 
   async findByRun(user: CurrentUser, runId: string): Promise<Snapshot[]> {
     await this.access.requireRun(user, runId, 'viewer');
+    const run = await this.prisma.run.findUniqueOrThrow({
+      where: { id: runId },
+      select: { projectId: true, suite: true },
+    });
     const rows = await this.prisma.snapshot.findMany({
       where: { runId },
       include: WITH_REVIEWER,
       orderBy: { createdAt: 'asc' },
     });
-    return rows.map((row) => this.toDto(row));
+    const settings = await this.settingsFor(run.projectId, run.suite, rows.map((r) => r.name));
+    return rows.map((row) => this.toDto(row, settings.get(row.name)));
   }
 
   async findById(id: string): Promise<Snapshot> {
@@ -96,10 +113,16 @@ export class SnapshotsService {
       : null;
     if (!baselineImage) baseline = null;
 
+    const settings = (await this.settingsFor(run.projectId, run.suite, [name])).get(name) ?? DEFAULT_SETTINGS;
+
     // Decoding, hashing and diffing run in a worker thread (see DiffService)
     let analysis: Awaited<ReturnType<DiffService['analyse']>>;
     try {
-      analysis = await this.diff.analyse({ image, baseline: baselineImage });
+      analysis = await this.diff.analyse({
+        image,
+        baseline: baselineImage,
+        ignoreRegions: settings.ignoreRegions,
+      });
     } catch {
       throw new BadRequestException(`Snapshot "${name}" is not a valid PNG`);
     }
@@ -110,10 +133,11 @@ export class SnapshotsService {
     let diffImage: Buffer | null = null;
 
     if (analysis.diff) {
-      const changed = analysis.diff.diffCount > 0 || analysis.diff.sizeChanged;
+      const changed = exceeds(analysis.diff, settings.threshold);
       status = changed ? 'pending' : 'unchanged';
       diffScore = analysis.diff.diffScore;
-      if (changed) diffImage = Buffer.from(analysis.diff.diffImage);
+      // Changes within the threshold keep their images, so reviewers see what was tolerated
+      if (analysis.diff.diffCount > 0 || changed) diffImage = Buffer.from(analysis.diff.diffImage);
     }
 
     // E.g. after a squash merge: the change was reviewed on its branch, but the
@@ -134,11 +158,11 @@ export class SnapshotsService {
       },
     });
 
-    if (status !== 'unchanged') await this.storage.put(imageKey(runId, snapshot.id), image);
+    if (status !== 'unchanged' || diffImage) await this.storage.put(imageKey(runId, snapshot.id), image);
     if (diffImage) await this.storage.put(diffKey(runId, snapshot.id), diffImage);
 
     return {
-      ...this.toDto(snapshot),
+      ...this.toDto(snapshot, settings),
       reviewPath: `/${run.project.slug}/${runId}?snapshot=${snapshot.id}`,
       failTest: status === 'pending' && run.project.failTestsOnChanges,
     };
@@ -229,18 +253,100 @@ export class SnapshotsService {
     // Accepting the last change turns the pull request's check green
     await this.commitStatus.reportRun(row.runId);
     // … and tells the team the review is done
-    if (snapshot.status === 'pending') {
-      const open = await this.prisma.snapshot.count({ where: { runId: row.runId, status: 'pending' } });
-      if (open === 0) await this.notifications.notifyRun(row.runId, 'run.reviewed');
-    }
-    return this.toDto(row);
+    if (snapshot.status === 'pending') await this.notifyIfReviewed(row.runId);
+    return this.dtoWithSettings(row);
+  }
+
+  private async notifyIfReviewed(runId: string) {
+    const open = await this.prisma.snapshot.count({ where: { runId, status: 'pending' } });
+    if (open === 0) await this.notifications.notifyRun(runId, 'run.reviewed');
+  }
+
+  /**
+   * Saves the review settings of a snapshot's name (in its project and suite)
+   * and applies them to its open changes right away: a change that is now
+   * ignored or within the threshold becomes `unchanged` — the commit status
+   * turns green without re-running CI. Changes that still exceed them stay as
+   * they are; the settings apply to them from the next run on.
+   */
+  async updateSettings(user: CurrentUser, id: string, dto: SnapshotSettings): Promise<Snapshot> {
+    await this.access.requireSnapshot(user, id, 'reviewer');
+    const settings = validateSettings(dto);
+    const snapshot = await this.prisma.snapshot.findUniqueOrThrow({
+      where: { id },
+      select: { name: true, run: { select: { projectId: true, suite: true } } },
+    });
+    const { projectId, suite } = snapshot.run;
+    const name = snapshot.name;
+    await this.prisma.snapshotSetting.upsert({
+      where: { projectId_suite_name: { projectId, suite, name } },
+      create: { projectId, suite, name, ...settings, ignoreRegions: settings.ignoreRegions as object[] },
+      update: { ...settings, ignoreRegions: settings.ignoreRegions as object[] },
+    });
+
+    const open = await this.prisma.snapshot.findMany({
+      where: { name, status: 'pending', baselineId: { not: null }, run: { projectId, suite } },
+      select: { id: true, runId: true, baselineId: true },
+    });
+    for (const change of open) await this.reevaluate(change, settings);
+
+    const row = await this.prisma.snapshot.findUniqueOrThrow({ where: { id }, include: WITH_REVIEWER });
+    return this.toDto(row, settings);
+  }
+
+  private async reevaluate(
+    change: { id: string; runId: string; baselineId: string | null },
+    settings: SnapshotSettings,
+  ) {
+    const [image, baseline] = await Promise.all([
+      this.storage.get(imageKey(change.runId, change.id)),
+      this.getImageBuffer(change.baselineId!),
+    ]).catch(() => [null, null]);
+    if (!image || !baseline) return;
+    const { diff } = await this.diff.analyse({ image, baseline, ignoreRegions: settings.ignoreRegions });
+    if (!diff || exceeds(diff, settings.threshold)) return;
+
+    await this.prisma.snapshot.update({
+      where: { id: change.id },
+      data: { status: 'unchanged', diffScore: diff.diffScore },
+    });
+    await this.storage.put(diffKey(change.runId, change.id), Buffer.from(diff.diffImage));
+    await this.commitStatus.reportRun(change.runId);
+    await this.notifyIfReviewed(change.runId);
+  }
+
+  /** Review settings per snapshot name, for the names that have any. */
+  private async settingsFor(projectId: string, suite: string, names: string[]) {
+    const rows = await this.prisma.snapshotSetting.findMany({
+      where: { projectId, suite, name: { in: names } },
+    });
+    return new Map<string, SnapshotSettings>(
+      rows.map((r) => [
+        r.name,
+        { ignoreRegions: r.ignoreRegions as unknown as IgnoreRegion[], threshold: r.threshold },
+      ]),
+    );
+  }
+
+  private async dtoWithSettings(row: SnapshotRow): Promise<Snapshot> {
+    const run = await this.prisma.run.findUniqueOrThrow({
+      where: { id: row.runId },
+      select: { projectId: true, suite: true },
+    });
+    const settings = await this.settingsFor(run.projectId, run.suite, [row.name]);
+    return this.toDto(row, settings.get(row.name));
   }
 
   async getImageBuffer(id: string): Promise<Buffer> {
     const snapshot = await this.findById(id);
-    // Unchanged snapshots are identical to their baseline, which holds the image
+    // Unchanged snapshots usually equal their baseline, which holds the image.
+    // Those that differed within their threshold, or were changes resolved by
+    // new settings, keep their own.
     if (snapshot.status === 'unchanged' && snapshot.baselineId) {
-      return this.getImageBuffer(snapshot.baselineId);
+      const own = await this.storage
+        .get(imageKey(snapshot.runId, id))
+        .catch((err) => (err instanceof NotFoundException ? null : Promise.reject(err)));
+      return own ?? this.getImageBuffer(snapshot.baselineId);
     }
     return this.storage.get(imageKey(snapshot.runId, id));
   }
@@ -251,8 +357,8 @@ export class SnapshotsService {
   }
 
   /** Snapshot as returned by the API, with signed image URLs for the web UI. */
-  private toDto(r: SnapshotRow): Snapshot {
-    const changed = CHANGE_STATUSES.includes(r.status as SnapshotStatus);
+  private toDto(r: SnapshotRow, settings: SnapshotSettings = DEFAULT_SETTINGS): Snapshot {
+    const changed = CHANGE_STATUSES.includes(r.status as SnapshotStatus) || hasOwnDiff(r);
     return {
       id: r.id,
       runId: r.runId,
@@ -267,6 +373,8 @@ export class SnapshotsService {
       autoApprovedFromId: r.autoApprovedFromId,
       reviewedBy: r.reviewedBy?.email ?? null,
       reviewedAt: r.reviewedAt?.toISOString() ?? null,
+      settings,
+      commentCount: r._count?.comments ?? 0,
     };
   }
 }
@@ -279,10 +387,37 @@ type BaselineSearchRun = {
   project: { defaultBranch: string };
 };
 
-function imageKey(runId: string, snapshotId: string) {
-  return `runs/${runId}/${snapshotId}.png`;
+/**
+ * Unchanged snapshots that differed within their threshold (or were resolved
+ * by new settings) keep their own image and diff.
+ */
+function hasOwnDiff(s: { status: string; diffScore: number | null }) {
+  return s.status === 'unchanged' && (s.diffScore ?? 0) > 0;
 }
 
-function diffKey(runId: string, snapshotId: string) {
-  return `runs/${runId}/${snapshotId}.diff.png`;
+/** Whether a comparison counts as a change: a new size, or more changed pixels than allowed. */
+function exceeds(diff: { diffCount: number; diffScore: number; sizeChanged: boolean }, threshold: number) {
+  return diff.sizeChanged || (diff.diffCount > 0 && diff.diffScore > threshold);
 }
+
+function validateSettings(dto: SnapshotSettings): SnapshotSettings {
+  const threshold = dto?.threshold ?? 0;
+  if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    throw new BadRequestException('threshold must be a number between 0 and 1');
+  }
+  const regions = dto?.ignoreRegions ?? [];
+  if (!Array.isArray(regions) || regions.length > MAX_REGIONS) {
+    throw new BadRequestException(`ignoreRegions must be a list of at most ${MAX_REGIONS} regions`);
+  }
+  const ignoreRegions = regions.map((r) => {
+    const values = [r?.x, r?.y, r?.width, r?.height];
+    if (!values.every((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100_000)) {
+      throw new BadRequestException('Each ignore region needs x, y, width and height in pixels');
+    }
+    const [x, y, width, height] = values.map(Math.round);
+    if (width < 1 || height < 1) throw new BadRequestException('Ignore regions must not be empty');
+    return { x, y, width, height };
+  });
+  return { ignoreRegions, threshold };
+}
+

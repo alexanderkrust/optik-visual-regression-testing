@@ -1,9 +1,10 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { access, mkdir, readFile, writeFile } from 'fs/promises';
+import { access, mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { dirname, resolve } from 'path';
 import {
   CreateBucketCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
   NoSuchKey,
@@ -18,6 +19,8 @@ interface StorageBackend {
   put(key: string, body: Buffer): Promise<void>;
   /** Resolves to null if the object does not exist. */
   get(key: string): Promise<Buffer | null>;
+  /** Removes the objects; missing ones are ignored. */
+  delete(keys: string[]): Promise<void>;
 }
 
 /**
@@ -60,6 +63,11 @@ export class StorageService implements OnModuleInit {
     if (!body) throw new NotFoundException('Image not found');
     return body;
   }
+
+  /** Removes images; missing ones are ignored. */
+  async delete(keys: string[]): Promise<void> {
+    if (keys.length > 0) await this.backend.delete(keys);
+  }
 }
 
 class FileBackend implements StorageBackend {
@@ -84,6 +92,10 @@ class FileBackend implements StorageBackend {
       if (err.code === 'ENOENT') return null;
       throw err;
     });
+  }
+
+  async delete(keys: string[]) {
+    await Promise.all(keys.map((key) => rm(this.path(key), { force: true })));
   }
 
   private path(key: string) {
@@ -146,6 +158,18 @@ class S3Backend implements StorageBackend {
     } catch (err) {
       if (err instanceof NoSuchKey) return null;
       throw err;
+    }
+  }
+
+  async delete(keys: string[]) {
+    // DeleteObjects takes up to 1000 keys per request
+    for (let i = 0; i < keys.length; i += 1000) {
+      await this.client.send(
+        new DeleteObjectsCommand({
+          Bucket: this.bucket,
+          Delete: { Objects: keys.slice(i, i + 1000).map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
     }
   }
 }

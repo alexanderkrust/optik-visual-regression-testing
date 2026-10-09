@@ -11,7 +11,15 @@ export const load: PageServerLoad = async (event) => {
       api.snapshots.list(event.params.runId),
     ]);
     const canReview = project.myRole !== 'viewer';
-    return { run, snapshots, canReview, projectSlug: event.params.project, runId: event.params.runId };
+    const canModerate = project.myRole === 'maintainer' || project.myRole === 'admin';
+    return {
+      run,
+      snapshots,
+      canReview,
+      canModerate,
+      projectSlug: event.params.project,
+      runId: event.params.runId,
+    };
   } catch (e) {
     if (e instanceof Error && e.message.startsWith('404')) {
       // Runs without visual changes are merged into the previous run of their branch
