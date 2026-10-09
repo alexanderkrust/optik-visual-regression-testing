@@ -9,6 +9,7 @@ const WITH_REVIEWER = { reviewedBy: { select: { email: true } } } as const;
 type SnapshotRow = PrismaSnapshot & { reviewedBy?: { email: string } | null };
 import { StorageService } from '../storage/storage.service';
 import { DiffService } from '../diff/diff.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type {
   Snapshot,
   SnapshotStatus,
@@ -35,6 +36,7 @@ export class SnapshotsService {
     private readonly commitStatus: CommitStatusService,
     private readonly access: AccessService,
     private readonly diff: DiffService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async findByRun(user: CurrentUser, runId: string): Promise<Snapshot[]> {
@@ -226,6 +228,11 @@ export class SnapshotsService {
     });
     // Accepting the last change turns the pull request's check green
     await this.commitStatus.reportRun(row.runId);
+    // … and tells the team the review is done
+    if (snapshot.status === 'pending') {
+      const open = await this.prisma.snapshot.count({ where: { runId: row.runId, status: 'pending' } });
+      if (open === 0) await this.notifications.notifyRun(row.runId, 'run.reviewed');
+    }
     return this.toDto(row);
   }
 

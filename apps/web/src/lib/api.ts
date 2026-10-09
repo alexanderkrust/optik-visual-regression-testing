@@ -3,6 +3,9 @@ import type {
   CreateApiTokenDto,
   CreatedApiTokenDto,
   CreatedInvitation,
+  CreatedNotificationChannel,
+  CreateNotificationChannelDto,
+  NotificationChannel,
   CreateInvitationDto,
   Invitation,
   Project,
@@ -24,9 +27,13 @@ function makeRequest(baseUrl: string, accessToken?: string) {
     const authHeaders: Record<string, string> = accessToken
       ? { Authorization: `Bearer ${accessToken}` }
       : {};
+    // Only declare JSON when there is a body — Fastify rejects an empty JSON body.
+    const contentType: Record<string, string> = init?.body
+      ? { 'Content-Type': 'application/json' }
+      : {};
     const res = await fetch(`${baseUrl}${path}`, {
-      headers: { 'Content-Type': 'application/json', ...authHeaders, ...init?.headers },
       ...init,
+      headers: { ...contentType, ...authHeaders, ...init?.headers },
     });
     if (!res.ok) {
       // "400 Bad Request: optik needs at least one admin" — keeps the API's message for the UI
@@ -60,6 +67,18 @@ export function createApi(accessToken?: string, baseUrl = BROWSER_BASE_URL) {
       create: (body: CreateInvitationDto) =>
         request<CreatedInvitation>('/invitations', { method: 'POST', body: JSON.stringify(body) }),
       revoke: (id: string) => request<void>(`/invitations/${id}`, { method: 'DELETE' }),
+    },
+    notifications: {
+      list: (slug: string) => request<NotificationChannel[]>(`/projects/${slug}/notifications`),
+      create: (slug: string, body: CreateNotificationChannelDto) =>
+        request<CreatedNotificationChannel>(`/projects/${slug}/notifications`, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+      remove: (slug: string, id: string) =>
+        request<void>(`/projects/${slug}/notifications/${id}`, { method: 'DELETE' }),
+      test: (slug: string, id: string) =>
+        request<{ delivered: boolean }>(`/projects/${slug}/notifications/${id}/test`, { method: 'POST' }),
     },
     members: {
       list: (slug: string) => request<ProjectMember[]>(`/projects/${slug}/members`),

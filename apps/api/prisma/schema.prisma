@@ -26,6 +26,7 @@ model Project {
   tokens    ApiToken[]
   members   ProjectMember[]
   invitations Invitation[]
+  notificationChannels NotificationChannel[]
 
   @@map("projects")
 }
@@ -191,4 +192,29 @@ model InstanceSetting {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("instance_settings")
+}
+
+enum NotificationChannelType {
+  slack
+  teams
+  webhook
+  email
+}
+
+/// Where a project's notifications go (e.g. "changes to review").
+model NotificationChannel {
+  id        String                  @id @default(uuid())
+  project   Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String                  @map("project_id")
+  type      NotificationChannelType
+  /// Webhook URL or email recipients — encrypted (webhook URLs are credentials)
+  targetEncrypted String            @map("target_encrypted")
+  /// Short, non-secret description shown in the UI (e.g. "hooks.slack.com/…/Xb3")
+  label     String
+  /// Generic webhooks: HMAC secret for the X-Optik-Signature header, encrypted
+  secretEncrypted String?           @map("secret_encrypted")
+  events    String[]
+  createdAt DateTime                @default(now()) @map("created_at")
+
+  @@map("notification_channels")
 }

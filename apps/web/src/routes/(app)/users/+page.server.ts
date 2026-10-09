@@ -27,13 +27,18 @@ export const actions: Actions = {
     try {
       const invitation = await serverApi(event.locals).invitations.create({
         email,
+        baseUrl: event.url.origin,
         role: data.get('role') as UserRole,
         ...(projectSlug
           ? { projectSlug, projectRole: data.get('projectRole') as ProjectRole }
           : {}),
       });
       // The link is shown once — only its hash is stored
-      return { inviteLink: event.url.origin + invitation.invitePath, invitedEmail: invitation.email };
+      return {
+        inviteLink: event.url.origin + invitation.invitePath,
+        invitedEmail: invitation.email,
+        emailSent: invitation.emailSent,
+      };
     } catch (e) {
       return fail(400, { inviteError: message(e), email });
     }

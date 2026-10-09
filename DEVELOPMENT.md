@@ -63,7 +63,7 @@ In development the browser calls `/api` on the Vite dev server, which forwards i
 docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-This starts Postgres, SeaweedFS (S3), the API and the web UI. On start the API container runs `prisma generate` and `prisma migrate deploy`, then watches `core` and the API. Source folders are bind-mounted, so edits in `apps/api/src`, `apps/web/src`, `packages/core/src` and `packages/shared/src` hot-reload.
+This starts Postgres, SeaweedFS (S3), [Mailpit](https://mailpit.axllent.org) (catches all e-mails), the API and the web UI. On start the API container runs `prisma generate` and `prisma migrate deploy`, then watches `core` and the API. Source folders are bind-mounted, so edits in `apps/api/src`, `apps/web/src`, `packages/core/src` and `packages/shared/src` hot-reload.
 
 Start only Postgres + S3 + API (e.g. to run the web app natively):
 
@@ -164,6 +164,7 @@ AWS_ACCESS_KEY_ID=optik AWS_SECRET_ACCESS_KEY=optik-secret aws --endpoint-url ht
 | API (direct) | http://localhost:3001/api |
 | Swagger | http://localhost:3001/api/docs |
 | S3 (SeaweedFS) | http://localhost:8333 |
+| Mailpit (e-mails sent by optik) | http://localhost:8025 |
 | Example app | http://localhost:5174 |
 
 ## Database (Prisma)
