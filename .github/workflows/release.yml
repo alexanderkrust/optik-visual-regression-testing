@@ -1,0 +1,164 @@
+name: Release
+
+# optik has one product version (all @optik/* packages, see .changeset/).
+#  1. Changesets keeps a "Version Packages" pull request up to date.
+#  2. Merging it bumps the version on main. This workflow then publishes the
+#     release: signed multi-arch image with SBOM, Helm chart, git tag and
+#     GitHub release. Versions that already have a tag are skipped.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write       # tag and GitHub release
+  pull-requests: write  # "Version Packages" pull request
+  packages: write       # push image and chart to GHCR
+  id-token: write       # keyless cosign signing via GitHub OIDC
+  attestations: write
+
+jobs:
+  version-pr:
+    name: Version pull request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action@v1
+        with:
+          version: pnpm version-packages
+          title: Version Packages
+          commit: Version Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  check:
+    name: Release needed?
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        run: |
+          version=$(node -p "require('./apps/api/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$version" = "0.0.0" ]; then
+            echo "Version 0.0.0 is never released"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          elif git rev-parse "v$version" >/dev/null 2>&1; then
+            echo "v$version is already released"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Releasing v$version"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    name: Publish v${{ needs.check.outputs.version }}
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Image and chart names
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          {
+            echo "IMAGE=ghcr.io/$owner/optik"
+            echo "CHART_REPO=ghcr.io/$owner/charts"
+            echo "MINOR=${VERSION%.*}"
+          } >> "$GITHUB_ENV"
+
+      # ── Image ──────────────────────────────────────────────────────────────
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push image
+        id: image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:${{ env.MINOR }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.title=optik
+            org.opencontainers.image.description=Self-hosted visual regression testing
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          # SBOM and SLSA provenance as BuildKit attestations in the registry
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── SBOM and signatures ────────────────────────────────────────────────
+      - name: SBOM (SPDX) for the release assets
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.image.outputs.digest }}
+          format: spdx-json
+          output-file: optik-${{ env.VERSION }}.spdx.json
+          upload-artifact: false
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign image and attest SBOM
+        run: |
+          ref="$IMAGE@${{ steps.image.outputs.digest }}"
+          cosign sign --yes "$ref"
+          cosign attest --yes --type spdxjson --predicate "optik-$VERSION.spdx.json" "$ref"
+
+      # ── Helm chart ─────────────────────────────────────────────────────────
+      - uses: azure/setup-helm@v4
+      - name: Package, push and sign Helm chart
+        run: |
+          helm package charts/optik --version "$VERSION" --app-version "$VERSION"
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          digest=$(helm push "optik-$VERSION.tgz" "oci://$CHART_REPO" 2>&1 | tee /dev/stderr | awk '/^Digest:/ {print $2}')
+          cosign sign --yes "$CHART_REPO/optik@$digest"
+
+      # ── Tag and GitHub release (last, so a failed run can simply be retried) ─
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/release-notes.mjs "$VERSION" > notes.md
+          cat >> notes.md <<NOTES
+
+          ## Install
+
+          \`\`\`bash
+          docker pull $IMAGE:$VERSION
+          helm install optik oci://$CHART_REPO/optik --version $VERSION
+          \`\`\`
+
+          Image digest: \`${{ steps.image.outputs.digest }}\` — signed with cosign (keyless), SBOM attached. See [Verifying releases](${{ github.server_url }}/${{ github.repository }}#verifying-releases).
+          NOTES
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "optik $VERSION" \
+            --notes-file notes.md \
+            "optik-$VERSION.spdx.json" "optik-$VERSION.tgz"

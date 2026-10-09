@@ -1,0 +1,27 @@
+optik {{ .Chart.AppVersion }} is starting. It runs the database migrations on the first start.
+
+{{- if .Values.ingress.enabled }}
+
+Open:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+
+Access it locally:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "optik.fullname" . }} 3000:{{ .Values.service.port }}
+  open http://localhost:3000
+{{- end }}
+
+{{ if .Values.admin.existingSecret -}}
+Sign in with the admin account from the "{{ .Values.admin.existingSecret }}" Secret.
+{{- else -}}
+The first visit shows a setup page to create the administrator account.
+{{- end }}
+
+Adapters (Vitest / Playwright) use this URL as OPTIK_SERVER_URL.
+{{- if .Values.postgresql.enabled }}
+
+Note: the bundled PostgreSQL is meant for evaluation and small installs. For
+production, use an external database (postgresql.enabled=false, database.existingSecret).
+{{- end }}

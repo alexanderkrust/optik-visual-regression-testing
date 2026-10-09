@@ -1,0 +1,20 @@
+{{- if and (not .Values.storage.s3.enabled) .Values.storage.persistence.enabled (not .Values.storage.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "optik.fullname" . }}-data
+  labels:
+    {{- include "optik.labels" . | nindent 4 }}
+  annotations:
+    # Screenshots must survive `helm uninstall`
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml .Values.storage.persistence.accessModes | nindent 4 }}
+  {{- with .Values.storage.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.persistence.size }}
+{{- end }}

@@ -1,0 +1,15 @@
+apiVersion: v2
+name: optik
+description: Self-hosted visual regression testing — web UI and API in one container
+type: application
+# Released in lockstep with the product: the release workflow sets version and
+# appVersion to the product version when packaging.
+version: 0.0.0
+appVersion: "0.0.0"
+home: https://github.com/alexanderkrust/optik-visual-regression-testing
+sources:
+  - https://github.com/alexanderkrust/optik-visual-regression-testing
+keywords:
+  - visual-regression
+  - testing
+  - screenshots
