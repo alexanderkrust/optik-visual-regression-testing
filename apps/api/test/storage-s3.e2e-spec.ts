@@ -30,6 +30,9 @@ describeS3('StorageService with S3', () => {
     await storage.put('runs/r1/s1.png', Buffer.from('png-bytes'));
     expect((await storage.get('runs/r1/s1.png')).toString()).toBe('png-bytes');
     await expect(storage.get('runs/r1/missing.png')).rejects.toBeInstanceOf(NotFoundException);
+
+    await storage.delete(['runs/r1/s1.png', 'runs/r1/missing.png']);
+    await expect(storage.get('runs/r1/s1.png')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('is not ready with wrong credentials', async () => {
