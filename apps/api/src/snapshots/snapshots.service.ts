@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { ImageUrlSigner } from './image-urls';
 import { StorageService } from '../storage/storage.service';
 import { computeDiff } from '@optik/core';
 import type {
@@ -10,6 +11,9 @@ import type {
 } from '@optik/shared';
 import type { Snapshot as PrismaSnapshot } from '@prisma/client';
 
+/** Statuses of snapshots that differ from their baseline (and have a diff image). */
+const CHANGE_STATUSES: SnapshotStatus[] = ['pending', 'approved', 'rejected'];
+
 /** Statuses whose image is a valid baseline for later runs. */
 const BASELINE_STATUSES: SnapshotStatus[] = ['new', 'approved'];
 
@@ -18,6 +22,7 @@ export class SnapshotsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly urls: ImageUrlSigner,
   ) {}
 
   async findByRun(runId: string): Promise<Snapshot[]> {
@@ -25,13 +30,13 @@ export class SnapshotsService {
       where: { runId },
       orderBy: { createdAt: 'asc' },
     });
-    return rows.map(toDto);
+    return rows.map((row) => this.toDto(row));
   }
 
   async findById(id: string): Promise<Snapshot> {
     const row = await this.prisma.snapshot.findUnique({ where: { id } });
     if (!row) throw new NotFoundException(`Snapshot "${id}" not found`);
-    return toDto(row);
+    return this.toDto(row);
   }
 
   /**
@@ -101,15 +106,18 @@ export class SnapshotsService {
     if (diffImage) await this.storage.put(diffKey(runId, snapshot.id), diffImage);
 
     return {
-      ...toDto(snapshot),
+      ...this.toDto(snapshot),
       reviewPath: `/${run.project.slug}/${runId}?snapshot=${snapshot.id}`,
     };
   }
 
   /** Approve or reject a visual change. Only snapshots that differ from their baseline can be reviewed. */
   async updateStatus(id: string, dto: UpdateSnapshotStatusDto): Promise<Snapshot> {
+    if (dto?.status !== 'approved' && dto?.status !== 'rejected') {
+      throw new BadRequestException('status must be "approved" or "rejected"');
+    }
     const snapshot = await this.findById(id);
-    if (!['pending', 'approved', 'rejected'].includes(snapshot.status)) {
+    if (!CHANGE_STATUSES.includes(snapshot.status)) {
       throw new BadRequestException(
         `Snapshot "${snapshot.name}" has no visual changes to review`,
       );
@@ -118,7 +126,7 @@ export class SnapshotsService {
       where: { id },
       data: { status: dto.status },
     });
-    return toDto(row);
+    return this.toDto(row);
   }
 
   async getImageBuffer(id: string): Promise<Buffer> {
@@ -134,6 +142,23 @@ export class SnapshotsService {
     const snapshot = await this.findById(id);
     return this.storage.get(diffKey(snapshot.runId, id));
   }
+
+  /** Snapshot as returned by the API, with signed image URLs for the web UI. */
+  private toDto(r: PrismaSnapshot): Snapshot {
+    const changed = CHANGE_STATUSES.includes(r.status as SnapshotStatus);
+    return {
+      id: r.id,
+      runId: r.runId,
+      name: r.name,
+      status: r.status as Snapshot['status'],
+      baselineId: r.baselineId,
+      diffScore: r.diffScore,
+      createdAt: r.createdAt.toISOString(),
+      imageUrl: this.urls.url(r.id, 'image'),
+      baselineImageUrl: r.baselineId ? this.urls.url(r.baselineId, 'image') : null,
+      diffUrl: changed ? this.urls.url(r.id, 'diff') : null,
+    };
+  }
 }
 
 function imageKey(runId: string, snapshotId: string) {
@@ -142,16 +167,4 @@ function imageKey(runId: string, snapshotId: string) {
 
 function diffKey(runId: string, snapshotId: string) {
   return `runs/${runId}/${snapshotId}.diff.png`;
-}
-
-function toDto(r: PrismaSnapshot): Snapshot {
-  return {
-    id: r.id,
-    runId: r.runId,
-    name: r.name,
-    status: r.status as Snapshot['status'],
-    baselineId: r.baselineId,
-    diffScore: r.diffScore,
-    createdAt: r.createdAt.toISOString(),
-  };
 }

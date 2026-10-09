@@ -231,7 +231,7 @@
                 Before (baseline)
               </p>
               <img
-                src={api.snapshots.imageUrl(selected.baselineId)}
+                src={selected.baselineImageUrl}
                 alt="{selected.name} — baseline"
                 class="max-w-full rounded"
               />
@@ -243,7 +243,7 @@
                 After (this run)
               </p>
               <img
-                src={api.snapshots.imageUrl(selected.id)}
+                src={selected.imageUrl}
                 alt="{selected.name} — this run"
                 class="max-w-full rounded"
               />
@@ -255,13 +255,13 @@
           <CardContent class="p-4">
             {#if isChange(selected) && view === 'diff'}
               <img
-                src={api.snapshots.diffUrl(selected.id)}
+                src={selected.diffUrl}
                 alt="{selected.name} — diff"
                 class="max-w-full rounded"
               />
             {:else}
               <img
-                src={api.snapshots.imageUrl(selected.id)}
+                src={selected.imageUrl}
                 alt={selected.name}
                 class="max-w-full rounded"
               />

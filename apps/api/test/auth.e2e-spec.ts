@@ -10,6 +10,13 @@ describe('health, setup and authentication', () => {
   beforeEach(() => resetDatabase(t.prisma));
 
   describe('health', () => {
+    it('sends security headers', async () => {
+      const res = await call(`${t.api}/health`);
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(res.headers.get('x-frame-options')).toBe('SAMEORIGIN');
+      expect(res.headers.get('x-powered-by')).toBeNull();
+    });
+
     it('reports liveness and readiness', async () => {
       expect((await call(`${t.api}/health`)).body).toEqual({
         status: 'ok',
@@ -103,6 +110,42 @@ describe('health, setup and authentication', () => {
       const second = await startApp();
       await second.app.close();
       expect(await t.prisma.user.count()).toBe(1);
+    });
+  });
+
+  describe('limiting failed sign-ins', () => {
+    let limited: TestApp;
+
+    beforeAll(async () => {
+      process.env.LOGIN_MAX_FAILURES = '3';
+      limited = await startApp();
+      delete process.env.LOGIN_MAX_FAILURES;
+    });
+    afterAll(() => limited.app.close());
+
+    const login = (email: string, password: string) =>
+      call(`${limited.api}/auth/login`, { json: { email, password } });
+
+    // The limiter lives in memory for the app's lifetime, so each test uses its own account
+    it('blocks an account after too many failures — even with the right password', async () => {
+      await AdminClient.setup(limited.api, 'admin@optik.test', 'correct-horse');
+      for (let i = 0; i < 3; i++) expect((await login('admin@optik.test', 'wrong')).status).toBe(401);
+
+      const blocked = await login('admin@optik.test', 'correct-horse');
+      expect(blocked.status).toBe(429);
+      expect(blocked.body.retryAfter).toBeGreaterThan(0);
+
+      // Case and whitespace don't get around it; other accounts are unaffected
+      expect((await login(' ADMIN@optik.test', 'correct-horse')).status).toBe(429);
+      expect((await login('someone@optik.test', 'wrong')).status).toBe(401);
+    });
+
+    it('resets the count on a successful sign-in', async () => {
+      await AdminClient.setup(limited.api, 'reset@optik.test', 'correct-horse');
+      for (let i = 0; i < 2; i++) await login('reset@optik.test', 'wrong');
+      expect((await login('reset@optik.test', 'correct-horse')).status).toBe(200);
+      for (let i = 0; i < 2; i++) await login('reset@optik.test', 'wrong');
+      expect((await login('reset@optik.test', 'correct-horse')).status).toBe(200);
     });
   });
 

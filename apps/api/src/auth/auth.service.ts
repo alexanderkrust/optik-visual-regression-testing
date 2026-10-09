@@ -5,12 +5,19 @@ import {
   UnauthorizedException,
   ForbiddenException,
   BadRequestException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../database/prisma.service';
+import { LoginLimiter } from './login-limiter';
+
+// Compared against when the email is unknown, so the response time doesn't
+// reveal which accounts exist.
+const DUMMY_HASH = bcrypt.hashSync('optik-timing-equaliser', 10);
 
 // Local type aliases — the Prisma client may not have generated these yet
 type UserRow = {
@@ -31,12 +38,18 @@ type RefreshTokenRow = {
 @Injectable()
 export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
+  private readonly loginLimiter: LoginLimiter;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    this.loginLimiter = new LoginLimiter(
+      Number(config.get('LOGIN_MAX_FAILURES') ?? 10),
+      Number(config.get('LOGIN_LOCKOUT_MINUTES') ?? 15) * 60_000,
+    );
+  }
 
   async onModuleInit() {
     const email = this.config.get<string>('ADMIN_EMAIL');
@@ -96,15 +109,30 @@ export class AuthService implements OnModuleInit {
     refreshToken: string;
     user: { id: string; email: string };
   }> {
+    email = email?.trim() ?? '';
+    const retryAfter = this.loginLimiter.retryAfter(email);
+    if (retryAfter > 0) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message: 'Too many failed sign-in attempts. Try again later.',
+          retryAfter,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     const user = (await (this.prisma as any).user.findUnique({
       where: { email },
     })) as UserRow | null;
 
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    const valid = await bcrypt.compare(password ?? '', user?.password ?? DUMMY_HASH);
+    if (!user || !valid) {
+      this.loginLimiter.recordFailure(email);
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
-
+    this.loginLimiter.reset(email);
     return this.issueTokens(user);
   }
 

@@ -56,9 +56,6 @@ export function createApi(accessToken?: string, baseUrl = BROWSER_BASE_URL) {
           method: 'PATCH',
           body: JSON.stringify({ status: 'rejected' } satisfies UpdateSnapshotStatusDto),
         }),
-      // Rendered into HTML (also during SSR), so always the browser-relative URL
-      imageUrl: (id: string) => `${BROWSER_BASE_URL}/snapshots/${id}/image`,
-      diffUrl: (id: string) => `${BROWSER_BASE_URL}/snapshots/${id}/diff`,
     },
   };
 }

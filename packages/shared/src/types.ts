@@ -36,6 +36,12 @@ export interface Snapshot {
   baselineId: string | null;
   diffScore: number | null;
   createdAt: string;
+  /** Signed, expiring URL of the screenshot (relative to the server) */
+  imageUrl: string;
+  /** Signed URL of the baseline's screenshot, if there is a baseline */
+  baselineImageUrl: string | null;
+  /** Signed URL of the diff image, for snapshots that differ from their baseline */
+  diffUrl: string | null;
 }
 
 /**
@@ -67,6 +73,8 @@ export interface ApiToken {
   id: string;
   projectId: string;
   name: string;
+  /** First characters of the token (e.g. "optik_3f9a1c"); the full token is only shown on creation. */
+  prefix: string;
   expiresAt: string | null;
   createdAt: string;
 }

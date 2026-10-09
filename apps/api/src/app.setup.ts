@@ -1,3 +1,4 @@
+import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 
@@ -9,6 +10,11 @@ export async function configureApp(app: NestFastifyApplication) {
   await app.register(multipart as any, {
     limits: { fileSize: 50 * 1024 * 1024 },
   });
+
+  // Security headers for API responses. No CSP here: the API serves JSON and
+  // the Swagger UI (inline scripts); the web UI sets its own CSP (svelte.config.js).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await app.register(helmet as any, { contentSecurityPolicy: false });
 
   // The API lives under /api; everything else is the web UI (same origin, no CORS)
   app.setGlobalPrefix('api');

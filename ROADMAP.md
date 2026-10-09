@@ -75,11 +75,11 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [ ] **CI platform integration** (GitHub, GitLab, Bitbucket, Azure DevOps): commit status / check with review link, turns green after approval without re-running CI; "fail the test" stays available as an option
 - [ ] Separate runs per test suite (e.g. Vitest vs. Playwright in the same project and branch) — today a clean run is merged into the previous run of the branch regardless of the suite
 - [ ] Multiple users, roles (Admin, Reviewer, Developer/Viewer), per-project permissions, teams, invitations
-- [ ] Security fixes
-  - [ ] Image endpoints require authentication (session cookie or signed, expiring URLs)
-  - [ ] API tokens stored hashed, not in plain text
-  - [ ] Rate limiting (login, token endpoints)
-  - [ ] Security headers (CSP, HSTS, …)
+- [x] Security fixes
+  - [x] Image endpoints require authentication (signed, expiring URLs or JWT)
+  - [x] API tokens stored hashed, not in plain text
+  - [x] Rate limiting of failed sign-ins (per account)
+  - [x] Security headers (CSP, HSTS, …)
 - [ ] Diffing as background jobs (queue in Postgres, e.g. pg-boss — no extra Redis)
 - [ ] Notifications: Slack, Microsoft Teams, e-mail (SMTP), generic webhooks
 - [ ] Review UI: slider / onion-skin diff, zoom, keyboard shortcuts, comments, ignore regions, per-snapshot thresholds

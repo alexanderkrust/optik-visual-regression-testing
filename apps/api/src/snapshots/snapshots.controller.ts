@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   Controller,
+  Headers,
+  UnauthorizedException,
   Get,
   Post,
   Patch,
@@ -15,12 +17,18 @@ import { ApiTags, ApiOperation, ApiConsumes, ApiQuery } from '@nestjs/swagger';
 import { TokenGuard } from '../tokens/token.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SnapshotsService } from './snapshots.service';
+import { ImageKind, ImageUrlSigner } from './image-urls';
+import { JwtService } from '@nestjs/jwt';
 import type { UpdateSnapshotStatusDto } from '@optik/shared';
 
 @ApiTags('snapshots')
 @Controller('snapshots')
 export class SnapshotsController {
-  constructor(private readonly snapshotsService: SnapshotsService) {}
+  constructor(
+    private readonly snapshotsService: SnapshotsService,
+    private readonly urls: ImageUrlSigner,
+    private readonly jwt: JwtService,
+  ) {}
 
   @Get()
   @UseGuards(JwtAuthGuard)
@@ -71,17 +79,55 @@ export class SnapshotsController {
   }
 
   @Get(':id/image')
-  @ApiOperation({ summary: 'Serve snapshot PNG' })
-  async getImage(@Param('id') id: string, @Res() res) {
-    const buffer = await this.snapshotsService.getImageBuffer(id);
-    sendPng(res, buffer);
+  @ApiOperation({
+    summary: 'Serve snapshot PNG',
+    description: 'Requires the signed URL from the snapshot (imageUrl) or a JWT.',
+  })
+  async getImage(
+    @Param('id') id: string,
+    @Query('expires') expires: string,
+    @Query('signature') signature: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Res() res,
+  ) {
+    this.assertImageAccess(id, 'image', expires, signature, authorization);
+    sendPng(res, await this.snapshotsService.getImageBuffer(id));
   }
 
   @Get(':id/diff')
-  @ApiOperation({ summary: 'Serve diff PNG' })
-  async getDiff(@Param('id') id: string, @Res() res) {
-    const buffer = await this.snapshotsService.getDiffBuffer(id);
-    sendPng(res, buffer);
+  @ApiOperation({
+    summary: 'Serve diff PNG',
+    description: 'Requires the signed URL from the snapshot (diffUrl) or a JWT.',
+  })
+  async getDiff(
+    @Param('id') id: string,
+    @Query('expires') expires: string,
+    @Query('signature') signature: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Res() res,
+  ) {
+    this.assertImageAccess(id, 'diff', expires, signature, authorization);
+    sendPng(res, await this.snapshotsService.getDiffBuffer(id));
+  }
+
+  /** Images are private: a valid signed URL or a signed-in user (JWT) is required. */
+  private assertImageAccess(
+    id: string,
+    kind: ImageKind,
+    expires: string | undefined,
+    signature: string | undefined,
+    authorization: string | undefined,
+  ) {
+    if (this.urls.verify(id, kind, expires, signature)) return;
+    if (authorization?.startsWith('Bearer ')) {
+      try {
+        this.jwt.verify(authorization.slice(7));
+        return;
+      } catch {
+        // fall through
+      }
+    }
+    throw new UnauthorizedException('The image URL is invalid or has expired');
   }
 }
 

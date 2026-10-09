@@ -76,6 +76,10 @@ async function mountWebUi(app: NestFastifyApplication) {
     headers['x-forwarded-proto'] ??= request.protocol;
     headers['x-forwarded-host'] ??= headers.host;
 
+    // Pages get their security headers from SvelteKit (hooks.server.ts);
+    // this covers static assets as well
+    reply.raw.setHeader('X-Content-Type-Options', 'nosniff');
+
     reply.hijack();
     handler(request.raw, reply.raw, () => {
       reply.raw.statusCode = 404;
