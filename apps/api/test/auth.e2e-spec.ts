@@ -169,6 +169,20 @@ describe('health, setup and authentication', () => {
       expect(unknown.status).toBe(401);
     });
 
+    it('stores refresh tokens only as a hash and cleans up expired ones', async () => {
+      const { refreshToken } = (await login('correct-horse')).body;
+      const rows = await t.prisma.refreshToken.findMany();
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+        expect(row.tokenHash).not.toBe(refreshToken);
+      }
+
+      await t.prisma.refreshToken.updateMany({ data: { expiresAt: new Date(0) } });
+      await login('correct-horse');
+      expect(await t.prisma.refreshToken.count()).toBe(1);
+    });
+
     it('refreshes the access token until logout', async () => {
       const { refreshToken } = (await login('correct-horse')).body;
 
