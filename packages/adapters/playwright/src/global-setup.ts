@@ -17,6 +17,7 @@ export default async function globalSetup(): Promise<void> {
     body: JSON.stringify({
       branch: getCurrentBranch(),
       commitSha: getCurrentCommit(),
+      suite: process.env._OPTIK_SUITE,
     }),
   })
 

@@ -105,7 +105,11 @@
 
 <div class="flex items-center justify-between mb-6 gap-4">
   <div>
-    <h1 class="text-2xl font-bold tracking-tight font-mono">{data.runId.slice(0, 8)}</h1>
+    <h1 class="text-2xl font-bold tracking-tight font-mono flex items-center gap-3">
+      {data.runId.slice(0, 8)}
+      <Badge variant="outline" class="font-mono text-xs font-normal">{data.run.suite}</Badge>
+      <span class="text-sm font-normal text-muted-foreground">{data.run.branch}</span>
+    </h1>
     <p class="text-muted-foreground text-sm mt-1">
       {snapshots.length} snapshot{snapshots.length === 1 ? '' : 's'}
       {#if pending.length > 0}

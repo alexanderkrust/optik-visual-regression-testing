@@ -73,7 +73,7 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 
 - [ ] **Baselines per branch** based on git ancestry: accepting a change on a feature branch must not affect `main` until merged (adapters send the merge-base commit)
 - [ ] **CI platform integration** (GitHub, GitLab, Bitbucket, Azure DevOps): commit status / check with review link, turns green after approval without re-running CI; "fail the test" stays available as an option
-- [ ] Separate runs per test suite (e.g. Vitest vs. Playwright in the same project and branch) — today a clean run is merged into the previous run of the branch regardless of the suite
+- [x] Separate runs per test suite (e.g. Vitest vs. Playwright in the same project and branch): run merging and baselines per suite
 - [ ] Multiple users, roles (Admin, Reviewer, Developer/Viewer), per-project permissions, teams, invitations
 - [x] Security fixes
   - [x] Image endpoints require authentication (signed, expiring URLs or JWT)

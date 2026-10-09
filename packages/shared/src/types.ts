@@ -10,6 +10,8 @@ export interface Run {
   projectId: string;
   projectSlug: string;
   branch: string;
+  /** Test suite that produced the run, e.g. "vitest" or "playwright" */
+  suite: string;
   commitSha: string;
   /** Latest commit when later runs without changes were merged into this one. */
   lastCommitSha: string | null;
@@ -67,6 +69,11 @@ export interface CreateProjectDto {
 export interface CreateRunDto {
   branch: string;
   commitSha: string;
+  /**
+   * Test suite, e.g. "vitest" or "playwright". Runs are merged and baselines
+   * are kept per suite. Defaults to "default".
+   */
+  suite?: string;
 }
 
 export interface ApiToken {
