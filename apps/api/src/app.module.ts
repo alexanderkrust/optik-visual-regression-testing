@@ -13,6 +13,7 @@ import { RunsModule } from './runs/runs.module';
 import { SnapshotsModule } from './snapshots/snapshots.module';
 import { TokensModule } from './tokens/tokens.module';
 import { AuthModule } from './auth/auth.module';
+import { LicenseModule } from './license/license.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { AuthModule } from './auth/auth.module';
     AuthModule,
     UsersModule,
     NotificationsModule,
+    LicenseModule,
   ],
   controllers: [AppController],
 })
