@@ -1,4 +1,20 @@
-import type { Project, Run, Snapshot, UpdateSnapshotStatusDto, UpdateProjectDto, ApiToken, CreateApiTokenDto, CreatedApiTokenDto } from '@optik/shared';
+import type {
+  ApiToken,
+  CreateApiTokenDto,
+  CreatedApiTokenDto,
+  CreatedInvitation,
+  CreateInvitationDto,
+  Invitation,
+  Project,
+  ProjectMember,
+  ProjectRole,
+  Run,
+  Snapshot,
+  UpdateProjectDto,
+  UpdateSnapshotStatusDto,
+  User,
+  UserRole,
+} from '@optik/shared';
 
 /** The API is served under /api on the same origin as the web UI. */
 const BROWSER_BASE_URL = '/api';
@@ -12,7 +28,12 @@ function makeRequest(baseUrl: string, accessToken?: string) {
       headers: { 'Content-Type': 'application/json', ...authHeaders, ...init?.headers },
       ...init,
     });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      // "400 Bad Request: optik needs at least one admin" — keeps the API's message for the UI
+      const body = (await res.json().catch(() => null)) as { message?: string | string[] } | null;
+      const detail = Array.isArray(body?.message) ? body.message.join(', ') : body?.message;
+      throw new Error(`${res.status} ${res.statusText}${detail ? `: ${detail}` : ''}`);
+    }
     if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;
   };
@@ -25,6 +46,28 @@ function makeRequest(baseUrl: string, accessToken?: string) {
 export function createApi(accessToken?: string, baseUrl = BROWSER_BASE_URL) {
   const request = makeRequest(baseUrl, accessToken);
   return {
+    auth: {
+      me: () => request<Pick<User, 'id' | 'email' | 'role'>>('/auth/me'),
+    },
+    users: {
+      list: () => request<User[]>('/users'),
+      setRole: (id: string, role: UserRole) =>
+        request<User>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+      remove: (id: string) => request<void>(`/users/${id}`, { method: 'DELETE' }),
+    },
+    invitations: {
+      list: () => request<Invitation[]>('/invitations'),
+      create: (body: CreateInvitationDto) =>
+        request<CreatedInvitation>('/invitations', { method: 'POST', body: JSON.stringify(body) }),
+      revoke: (id: string) => request<void>(`/invitations/${id}`, { method: 'DELETE' }),
+    },
+    members: {
+      list: (slug: string) => request<ProjectMember[]>(`/projects/${slug}/members`),
+      set: (slug: string, body: { email: string; role: ProjectRole }) =>
+        request<ProjectMember>(`/projects/${slug}/members`, { method: 'PUT', body: JSON.stringify(body) }),
+      remove: (slug: string, userId: string) =>
+        request<void>(`/projects/${slug}/members/${userId}`, { method: 'DELETE' }),
+    },
     projects: {
       list: () => request<Project[]>('/projects'),
       create: (body: { name: string; slug: string }) =>

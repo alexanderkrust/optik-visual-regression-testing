@@ -1,3 +1,48 @@
+/** admin: manages users, creates projects, sees every project. member: only their projects. */
+export type UserRole = 'admin' | 'member';
+
+/** viewer: sees runs. reviewer: + accepts / rejects. maintainer: + tokens, settings, members. */
+export type ProjectRole = 'viewer' | 'reviewer' | 'maintainer';
+
+/** A user's role in a project; instance admins count as "admin". */
+export type EffectiveProjectRole = ProjectRole | 'admin';
+
+export interface User {
+  id: string;
+  email: string;
+  role: UserRole;
+  createdAt: string;
+}
+
+export interface ProjectMember {
+  userId: string;
+  email: string;
+  role: ProjectRole;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: UserRole;
+  projectSlug: string | null;
+  projectRole: ProjectRole | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface CreateInvitationDto {
+  email: string;
+  role?: UserRole;
+  /** Optionally add the new user to a project right away */
+  projectSlug?: string;
+  projectRole?: ProjectRole;
+}
+
+export interface CreatedInvitation extends Invitation {
+  /** Path of the invitation link (relative to the optik URL) — shown only once */
+  invitePath: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -12,6 +57,8 @@ export interface Project {
   githubApiUrl: string | null;
   /** Whether a GitHub token is stored — the token itself is never returned */
   githubTokenConfigured: boolean;
+  /** The signed-in user's role in this project */
+  myRole: EffectiveProjectRole;
   createdAt: string;
 }
 
@@ -59,6 +106,9 @@ export interface Snapshot {
    * already approved — the id of that approved snapshot.
    */
   autoApprovedFromId: string | null;
+  /** Who accepted or rejected the change, and when */
+  reviewedBy: string | null;
+  reviewedAt: string | null;
 }
 
 /**

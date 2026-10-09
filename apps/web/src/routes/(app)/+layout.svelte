@@ -2,15 +2,16 @@
   import '../../app.css';
   import type { Snippet } from 'svelte';
   import { page } from '$app/state';
-  import { LayoutDashboard, FolderOpen, LogOut } from 'lucide-svelte';
+  import { LayoutDashboard, FolderOpen, LogOut, Users } from 'lucide-svelte';
   import type { LayoutData } from './$types';
 
   let { children, data }: { children: Snippet; data: LayoutData } = $props();
 
-  const navItems = [
+  const navItems = $derived([
     { label: 'Dashboard', href: '/', icon: LayoutDashboard },
     { label: 'Projects', href: '/projects', icon: FolderOpen },
-  ];
+    ...(data.user.role === 'admin' ? [{ label: 'Users', href: '/users', icon: Users }] : []),
+  ]);
 
   function isActive(href: string): boolean {
     const pathname = page.url.pathname;

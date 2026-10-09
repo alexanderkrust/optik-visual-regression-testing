@@ -3,6 +3,10 @@ import { PrismaService } from '../database/prisma.service';
 import { ImageUrlSigner } from './image-urls';
 import { DEFAULT_SUITE } from '../runs/runs.service';
 import { CommitStatusService } from '../ci/commit-status.service';
+import { AccessService, CurrentUser } from '../access/access.service';
+
+const WITH_REVIEWER = { reviewedBy: { select: { email: true } } } as const;
+type SnapshotRow = PrismaSnapshot & { reviewedBy?: { email: string } | null };
 import { StorageService } from '../storage/storage.service';
 import { computeDiff, pixelHash } from '@optik/core';
 import type {
@@ -29,11 +33,14 @@ export class SnapshotsService {
     private readonly storage: StorageService,
     private readonly urls: ImageUrlSigner,
     private readonly commitStatus: CommitStatusService,
+    private readonly access: AccessService,
   ) {}
 
-  async findByRun(runId: string): Promise<Snapshot[]> {
+  async findByRun(user: CurrentUser, runId: string): Promise<Snapshot[]> {
+    await this.access.requireRun(user, runId, 'viewer');
     const rows = await this.prisma.snapshot.findMany({
       where: { runId },
+      include: WITH_REVIEWER,
       orderBy: { createdAt: 'asc' },
     });
     return rows.map((row) => this.toDto(row));
@@ -204,7 +211,8 @@ export class SnapshotsService {
   }
 
   /** Approve or reject a visual change. Only snapshots that differ from their baseline can be reviewed. */
-  async updateStatus(id: string, dto: UpdateSnapshotStatusDto): Promise<Snapshot> {
+  async updateStatus(user: CurrentUser, id: string, dto: UpdateSnapshotStatusDto): Promise<Snapshot> {
+    await this.access.requireSnapshot(user, id, 'reviewer');
     if (dto?.status !== 'approved' && dto?.status !== 'rejected') {
       throw new BadRequestException('status must be "approved" or "rejected"');
     }
@@ -216,7 +224,8 @@ export class SnapshotsService {
     }
     const row = await this.prisma.snapshot.update({
       where: { id },
-      data: { status: dto.status },
+      data: { status: dto.status, reviewedById: user.id, reviewedAt: new Date() },
+      include: WITH_REVIEWER,
     });
     // Accepting the last change turns the pull request's check green
     await this.commitStatus.reportRun(row.runId);
@@ -238,7 +247,7 @@ export class SnapshotsService {
   }
 
   /** Snapshot as returned by the API, with signed image URLs for the web UI. */
-  private toDto(r: PrismaSnapshot): Snapshot {
+  private toDto(r: SnapshotRow): Snapshot {
     const changed = CHANGE_STATUSES.includes(r.status as SnapshotStatus);
     return {
       id: r.id,
@@ -252,6 +261,8 @@ export class SnapshotsService {
       baselineImageUrl: r.baselineId ? this.urls.url(r.baselineId, 'image') : null,
       diffUrl: changed ? this.urls.url(r.id, 'diff') : null,
       autoApprovedFromId: r.autoApprovedFromId,
+      reviewedBy: r.reviewedBy?.email ?? null,
+      reviewedAt: r.reviewedAt?.toISOString() ?? null,
     };
   }
 }

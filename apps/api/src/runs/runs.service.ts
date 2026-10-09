@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../database/prisma.service';
 import { ProjectsService } from '../projects/projects.service';
 import { CommitStatusService } from '../ci/commit-status.service';
+import { AccessService, CurrentUser } from '../access/access.service';
 import type { Run, CreateRunDto } from '@optik/shared';
 import type { Run as PrismaRun, Snapshot as PrismaSnapshot } from '@prisma/client';
 
@@ -33,10 +34,11 @@ export class RunsService {
     private readonly prisma: PrismaService,
     private readonly projectsService: ProjectsService,
     private readonly commitStatus: CommitStatusService,
+    private readonly access: AccessService,
   ) {}
 
-  async findByProject(projectSlug: string): Promise<Run[]> {
-    const project = await this.projectsService.findBySlug(projectSlug);
+  async findByProject(user: CurrentUser, projectSlug: string): Promise<Run[]> {
+    const { project } = await this.access.requireProject(user, { slug: projectSlug }, 'viewer');
     const rows = await this.prisma.run.findMany({
       where: { projectId: project.id },
       include: INCLUDE,
@@ -54,8 +56,14 @@ export class RunsService {
     return toDto(row);
   }
 
+  /** Readable by viewers of the run's project. */
+  async findVisible(user: CurrentUser, id: string): Promise<Run> {
+    await this.access.requireRun(user, id, 'viewer');
+    return this.findById(id);
+  }
+
   async create(projectSlug: string, dto: CreateRunDto): Promise<Run> {
-    const project = await this.projectsService.findBySlug(projectSlug);
+    const project = { id: await this.projectsService.idBySlug(projectSlug) };
     const suite = dto.suite?.trim() || DEFAULT_SUITE;
     if (!SUITE_PATTERN.test(suite)) {
       throw new BadRequestException(

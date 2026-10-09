@@ -65,6 +65,9 @@
     return { label: 'passed', variant: 'success' };
   }
 
+  const selectClass =
+    'h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+
   let activeTab = $state('runs');
 
   const now = new Date();
@@ -168,13 +171,16 @@
 <Tabs bind:value={activeTab}>
   <TabsList class="mb-6">
     <TabsTrigger value="runs">Runs</TabsTrigger>
-    <TabsTrigger value="tokens">Access Tokens</TabsTrigger>
-    <TabsTrigger value="settings">Settings</TabsTrigger>
+    {#if data.manages}
+      <TabsTrigger value="members">Members</TabsTrigger>
+      <TabsTrigger value="tokens">Access Tokens</TabsTrigger>
+      <TabsTrigger value="settings">Settings</TabsTrigger>
+    {/if}
   </TabsList>
 
   <!-- Runs tab -->
   <TabsContent value="runs">
-    {#if !hasValidToken}
+    {#if data.manages && !hasValidToken}
       <div class="mb-4 flex items-start gap-3 rounded-md border bg-muted px-4 py-3 text-sm text-foreground">
         <Key class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <span>
@@ -448,6 +454,81 @@
                       class="text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
                       <Trash2 class="h-4 w-4" />
+                    </Button>
+                  </form>
+                </TableCell>
+              </TableRow>
+            {/each}
+          </TableBody>
+        </Table>
+      </Card>
+    {/if}
+  </TabsContent>
+
+  <!-- Members tab -->
+  <TabsContent value="members">
+    <Card class="mb-4">
+      <CardContent class="p-6">
+        <form method="POST" action="?/setMember" use:enhance class="flex flex-wrap items-end gap-3">
+          <div class="flex flex-col gap-1.5 flex-1 min-w-56">
+            <Label for="member-email">Add a user</Label>
+            <Input id="member-email" name="email" type="email" required placeholder="jane@example.com" />
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <Label for="member-role">Role</Label>
+            <select id="member-role" name="role" class={selectClass}>
+              <option value="viewer">Viewer</option>
+              <option value="reviewer">Reviewer</option>
+              <option value="maintainer">Maintainer</option>
+            </select>
+          </div>
+          <Button type="submit" size="sm">Add</Button>
+        </form>
+        {#if form && 'memberError' in form}
+          <p class="mt-3 text-sm text-destructive">{(form as { memberError: string }).memberError}</p>
+        {/if}
+        <p class="mt-3 text-xs text-muted-foreground">
+          Viewers see runs, reviewers also accept and reject changes, maintainers also manage
+          members, tokens and settings. Admins can access every project. New people are invited
+          under <em>Users</em> (admins).
+        </p>
+      </CardContent>
+    </Card>
+
+    {#if data.members.length > 0}
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Email</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead class="w-12"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {#each data.members as member (member.userId)}
+              <TableRow>
+                <TableCell class="font-medium">{member.email}</TableCell>
+                <TableCell>
+                  <form method="POST" action="?/setMember" use:enhance>
+                    <input type="hidden" name="email" value={member.email} />
+                    <select
+                      name="role"
+                      class={selectClass}
+                      value={member.role}
+                      onchange={(e) => e.currentTarget.form?.requestSubmit()}
+                    >
+                      <option value="viewer">Viewer</option>
+                      <option value="reviewer">Reviewer</option>
+                      <option value="maintainer">Maintainer</option>
+                    </select>
+                  </form>
+                </TableCell>
+                <TableCell>
+                  <form method="POST" action="?/removeMember" use:enhance>
+                    <input type="hidden" name="userId" value={member.userId} />
+                    <Button type="submit" variant="ghost" size="sm" aria-label="Remove {member.email}">
+                      <Trash2 class="h-4 w-4 text-muted-foreground" />
                     </Button>
                   </form>
                 </TableCell>

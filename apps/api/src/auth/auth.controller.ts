@@ -1,4 +1,7 @@
-import { Controller, Get, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import type { CurrentUser } from '../access/access.service';
+import { User } from '../access/current-user.decorator';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 
@@ -33,6 +36,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Refresh access token' })
   refresh(@Body() body: { refreshToken: string }) {
     return this.authService.refresh(body.refreshToken);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'The signed-in user, incl. their role' })
+  me(@User() user: CurrentUser) {
+    return user;
   }
 
   @Post('logout')
