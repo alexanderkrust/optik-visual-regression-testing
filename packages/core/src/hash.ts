@@ -6,7 +6,11 @@ import { PNG } from 'pngjs';
  * images get the same hash even if their PNG encoding differs.
  */
 export function pixelHash(buffer: Buffer): string {
-  const image = PNG.sync.read(buffer);
+  return hashImage(PNG.sync.read(buffer));
+}
+
+/** Same as pixelHash, for an image that is already decoded. */
+export function hashImage(image: PNG): string {
   return createHash('sha256')
     .update(`${image.width}x${image.height}:`)
     .update(image.data)

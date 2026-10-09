@@ -14,9 +14,11 @@ export interface DiffResult {
  * dimensions with opaque magenta, so the added or removed area counts as changed pixels.
  */
 export function computeDiff(baselineBuffer: Buffer, currentBuffer: Buffer): DiffResult {
-  const baseline = PNG.sync.read(baselineBuffer);
-  const current = PNG.sync.read(currentBuffer);
+  return diffImages(PNG.sync.read(baselineBuffer), PNG.sync.read(currentBuffer));
+}
 
+/** Same as computeDiff, for images that are already decoded. */
+export function diffImages(baseline: PNG, current: PNG): DiffResult {
   const width = Math.max(baseline.width, current.width);
   const height = Math.max(baseline.height, current.height);
   const sizeChanged = baseline.width !== current.width || baseline.height !== current.height;

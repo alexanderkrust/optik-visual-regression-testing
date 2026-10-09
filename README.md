@@ -387,6 +387,7 @@ Only `DATABASE_URL` is required. Every variable also accepts a `<NAME>_FILE` var
 | `SESSION_SECRET` | generated | Secret for encrypting the session cookie |
 | `JWT_ACCESS_EXPIRES` | `15m` | Access token lifetime |
 | `JWT_REFRESH_EXPIRES` | `7d` | Refresh token lifetime |
+| `DIFF_WORKERS` | CPU cores, max. 4 | Worker threads for decoding and diffing screenshots; `0` runs them on the main thread |
 | `LOGIN_MAX_FAILURES` | `10` | Failed sign-ins per account before it is temporarily blocked |
 | `LOGIN_LOCKOUT_MINUTES` | `15` | Time window for failed sign-ins (and maximum block duration) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Create the admin account on start instead of the setup page (automated installs) |
