@@ -15,6 +15,7 @@ import { SecretBox } from '../common/secret-box';
 import { publicUrl } from '../common/public-url';
 import { AccessService, CurrentUser } from '../access/access.service';
 import { MailerService } from './mailer.service';
+import { AuditTrail } from '../audit/audit-trail';
 
 const EVENTS: NotificationEvent[] = ['run.needs_review', 'run.reviewed'];
 const TYPES: NotificationChannelType[] = ['slack', 'teams', 'webhook', 'email'];
@@ -48,6 +49,7 @@ export class NotificationsService {
     private readonly access: AccessService,
     private readonly mailer: MailerService,
     private readonly config: ConfigService,
+    private readonly audit: AuditTrail,
   ) {}
 
   // ---------------------------------------------------------------- channels
@@ -91,12 +93,26 @@ export class NotificationsService {
         events,
       },
     });
+    await this.audit.record({
+      action: 'notification_channel.created',
+      project: { id: project.id, slug: project.slug },
+      target: { type: 'notification_channel', id: row.id, label: `${row.type}: ${row.label}` },
+      details: { events },
+    });
     return { ...toDto(row), ...(webhookSecret ? { webhookSecret } : {}) };
   }
 
   async remove(user: CurrentUser, slug: string, id: string): Promise<void> {
     const { project } = await this.access.requireProject(user, { slug }, 'maintainer');
+    const channel = await this.prisma.notificationChannel.findFirst({ where: { id, projectId: project.id } });
     await this.prisma.notificationChannel.deleteMany({ where: { id, projectId: project.id } });
+    if (channel) {
+      await this.audit.record({
+        action: 'notification_channel.removed',
+        project: { id: project.id, slug: project.slug },
+        target: { type: 'notification_channel', id, label: `${channel.type}: ${channel.label}` },
+      });
+    }
   }
 
   /** Sends a test message to one channel; true if it was delivered. */

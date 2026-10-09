@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import type { CreateSnapshotCommentDto, SnapshotComment } from '@optik/shared';
 import { PrismaService } from '../database/prisma.service';
 import { AccessService, CurrentUser } from '../access/access.service';
+import { AuditTrail } from '../audit/audit-trail';
 
 const MAX_LENGTH = 5000;
 const WITH_AUTHOR = { author: { select: { email: true } } } as const;
@@ -15,6 +16,7 @@ export class CommentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
+    private readonly audit: AuditTrail,
   ) {}
 
   async list(user: CurrentUser, snapshotId: string): Promise<SnapshotComment[]> {
@@ -32,7 +34,7 @@ export class CommentsService {
     snapshotId: string,
     dto: CreateSnapshotCommentDto,
   ): Promise<SnapshotComment> {
-    await this.access.requireSnapshot(user, snapshotId, 'reviewer');
+    const { project } = await this.access.requireSnapshot(user, snapshotId, 'reviewer');
     const body = typeof dto?.body === 'string' ? dto.body.trim() : '';
     if (!body) throw new BadRequestException('The comment is empty');
     if (body.length > MAX_LENGTH) {
@@ -40,21 +42,39 @@ export class CommentsService {
     }
     const row = await this.prisma.snapshotComment.create({
       data: { snapshotId, authorId: user.id, body },
-      include: WITH_AUTHOR,
+      include: { ...WITH_AUTHOR, snapshot: { select: { name: true } } },
+    });
+    await this.audit.record({
+      action: 'comment.created',
+      project: { id: project.id, slug: project.slug },
+      target: { type: 'snapshot', id: snapshotId, label: row.snapshot.name },
+      details: { commentId: row.id },
     });
     return toDto(row);
   }
 
   async remove(user: CurrentUser, snapshotId: string, commentId: string): Promise<void> {
-    const { role } = await this.access.requireSnapshot(user, snapshotId, 'viewer');
+    const { project, role } = await this.access.requireSnapshot(user, snapshotId, 'viewer');
     const comment = await this.prisma.snapshotComment.findFirst({
       where: { id: commentId, snapshotId },
-      select: { authorId: true },
+      select: {
+        authorId: true,
+        body: true,
+        author: { select: { email: true } },
+        snapshot: { select: { name: true } },
+      },
     });
     if (!comment) throw new NotFoundException(`Comment "${commentId}" not found`);
     const mayDelete = comment.authorId === user.id || role === 'maintainer' || role === 'admin';
     if (!mayDelete) throw new ForbiddenException('Only the author or a maintainer can delete this comment');
     await this.prisma.snapshotComment.delete({ where: { id: commentId } });
+    // Deleted comments are gone from the UI — the audit log keeps what they said
+    await this.audit.record({
+      action: 'comment.deleted',
+      project: { id: project.id, slug: project.slug },
+      target: { type: 'snapshot', id: snapshotId, label: comment.snapshot.name },
+      details: { commentId, author: comment.author?.email ?? null, body: comment.body.slice(0, 1000) },
+    });
   }
 }
 
