@@ -74,7 +74,7 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [x] **Baselines per branch** based on git ancestry: accepting a change on a feature branch doesn't affect `main` until merged; squash/rebase merges are recognised by pixel-identical approved images
 - [ ] Project setting to require a manual review even for pixel-identical approved images (four-eyes principle)
 - [x] **CI integration, GitHub** (incl. Enterprise Server): commit status with review link, turns green after approval without re-running CI; "fail the test" as project setting and adapter option
-- [ ] CI integration for GitLab, Bitbucket and Azure DevOps
+- [x] CI integration for GitLab (incl. self-managed), Bitbucket Cloud and Data Center, Azure DevOps (Services and Server, incl. pull request statuses for branch policies); adapters detect GitLab CI, Bitbucket Pipelines, Azure Pipelines and Jenkins
 - [ ] GitHub App instead of personal tokens (org-wide install, Checks API with annotations)
 - [x] Separate runs per test suite (e.g. Vitest vs. Playwright in the same project and branch): run merging and baselines per suite
 - [x] Multiple users, instance roles (admin, member), project roles (viewer, reviewer, maintainer), invitation links, review history (who accepted / rejected)
