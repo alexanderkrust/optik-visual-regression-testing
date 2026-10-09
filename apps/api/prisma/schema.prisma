@@ -6,6 +6,14 @@ datasource db {
   provider = "postgresql"
 }
 
+enum CiProvider {
+  github
+  gitlab
+  bitbucket
+  bitbucket_server
+  azure_devops
+}
+
 model Project {
   id        String     @id @default(uuid())
   name      String
@@ -16,11 +24,13 @@ model Project {
   /// Let tests fail on visual changes. Off when changes are reported as a
   /// commit status instead (CI stays green, the status blocks the merge).
   failTestsOnChanges Boolean @default(true) @map("fail_tests_on_changes")
-  /// GitHub commit statuses: "owner/repo", API URL for GitHub Enterprise
-  /// Server (null = github.com) and the token, encrypted (see SecretBox)
-  githubRepo           String? @map("github_repo")
-  githubApiUrl         String? @map("github_api_url")
-  githubTokenEncrypted String? @map("github_token_encrypted")
+  /// Commit statuses: the CI system's provider, repository (format depends
+  /// on the provider), API URL (null = the provider's cloud service) and the
+  /// token, encrypted (see SecretBox)
+  ciProvider       CiProvider? @map("ci_provider")
+  ciRepository     String?     @map("ci_repository")
+  ciApiUrl         String?     @map("ci_api_url")
+  ciTokenEncrypted String?     @map("ci_token_encrypted")
   createdAt DateTime   @default(now()) @map("created_at")
   runs      Run[]
   tokens    ApiToken[]
@@ -69,6 +79,9 @@ model Run {
   status    RunStatus  @default(running)
   /// optik URL as the adapter reached it — for links in commit statuses
   serverUrl String?    @map("server_url")
+  /// Pull request the run belongs to, where the CI system says so — Azure
+  /// DevOps branch policies need statuses on the pull request
+  pullRequest String?  @map("pull_request")
   createdAt DateTime   @default(now()) @map("created_at")
   // Consecutive runs without visual changes are merged into one run:
   // updatedAt is the last time it ran, runCount how often, lastCommitSha the latest commit.
