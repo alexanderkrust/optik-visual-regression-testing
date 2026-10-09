@@ -16,6 +16,7 @@
   import { today, getLocalTimeZone } from '@internationalized/date';
   import type { DateValue } from '@internationalized/date';
   import { Badge } from '$lib/components/ui/badge';
+  import { Separator } from '$lib/components/ui/separator';
   import { Button } from '$lib/components/ui/button';
   import { Card, CardContent } from '$lib/components/ui/card';
   import { Input } from '$lib/components/ui/input';
@@ -477,6 +478,47 @@
               (e.g. a shallow clone in CI), optik falls back to its own branch and then to this one.
             </p>
           </div>
+
+          <Separator />
+
+          <div class="space-y-1">
+            <h3 class="text-sm font-semibold">GitHub commit status</h3>
+            <p class="text-xs text-muted-foreground">
+              Each run reports a status (<code>optik/&lt;suite&gt;</code>) with a link to the review.
+              It turns green once all changes are accepted — no need to re-run CI.
+            </p>
+          </div>
+          <div class="space-y-1.5">
+            <Label for="github-repo">Repository</Label>
+            <Input id="github-repo" name="githubRepo" value={data.project.githubRepo ?? ''} placeholder="owner/repo" class="font-mono" />
+          </div>
+          <div class="space-y-1.5">
+            <Label for="github-token">Token</Label>
+            <Input
+              id="github-token"
+              name="githubToken"
+              type="password"
+              autocomplete="off"
+              placeholder={data.project.githubTokenConfigured ? 'Stored — leave empty to keep' : 'Fine-grained token with "Commit statuses: write"'}
+            />
+          </div>
+          <div class="space-y-1.5">
+            <Label for="github-api-url">API URL <span class="font-normal text-muted-foreground">(GitHub Enterprise Server only)</span></Label>
+            <Input id="github-api-url" name="githubApiUrl" value={data.project.githubApiUrl ?? ''} placeholder="https://github.example.com/api/v3" class="font-mono" />
+          </div>
+
+          <Separator />
+
+          <label class="flex items-start gap-2 text-sm">
+            <input type="checkbox" name="failTestsOnChanges" checked={data.project.failTestsOnChanges} class="mt-1" />
+            <span>
+              Fail tests on visual changes
+              <span class="block text-xs text-muted-foreground">
+                Turn off when the commit status blocks merging — CI then stays green and the status
+                shows what needs review. Adapters can override this with <code>failOnChanges</code>.
+              </span>
+            </span>
+          </label>
           {#if form && 'settingsError' in form}
             <p class="text-sm text-destructive">{(form as { settingsError: string }).settingsError}</p>
           {:else if form && 'settingsSaved' in form}

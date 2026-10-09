@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../database/prisma.service';
 import { ImageUrlSigner } from './image-urls';
 import { DEFAULT_SUITE } from '../runs/runs.service';
+import { CommitStatusService } from '../ci/commit-status.service';
 import { StorageService } from '../storage/storage.service';
 import { computeDiff, pixelHash } from '@optik/core';
 import type {
@@ -27,6 +28,7 @@ export class SnapshotsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly urls: ImageUrlSigner,
+    private readonly commitStatus: CommitStatusService,
   ) {}
 
   async findByRun(runId: string): Promise<Snapshot[]> {
@@ -65,7 +67,7 @@ export class SnapshotsService {
         suite: true,
         branch: true,
         ancestors: true,
-        project: { select: { slug: true, defaultBranch: true } },
+        project: { select: { slug: true, defaultBranch: true, failTestsOnChanges: true } },
       },
     });
     // A token may only write to runs of its own project; don't reveal others
@@ -132,6 +134,7 @@ export class SnapshotsService {
     return {
       ...this.toDto(snapshot),
       reviewPath: `/${run.project.slug}/${runId}?snapshot=${snapshot.id}`,
+      failTest: status === 'pending' && run.project.failTestsOnChanges,
     };
   }
 
@@ -215,6 +218,8 @@ export class SnapshotsService {
       where: { id },
       data: { status: dto.status },
     });
+    // Accepting the last change turns the pull request's check green
+    await this.commitStatus.reportRun(row.runId);
     return this.toDto(row);
   }
 

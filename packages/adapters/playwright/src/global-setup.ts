@@ -1,6 +1,6 @@
 import { getAncestorCommits, getCurrentBranch, getCurrentCommit } from "@optik/core"
 import { authFetch } from "./auth.js"
-import { apiUrl } from "./server.js"
+import { apiUrl, serverUrl } from "./server.js"
 
 export default async function globalSetup(): Promise<void> {
   const token = process.env._OPTIK_TOKEN ?? ""
@@ -20,6 +20,7 @@ export default async function globalSetup(): Promise<void> {
       suite: process.env._OPTIK_SUITE,
       // Baselines come from runs on these commits (see the "Branches" section of the README)
       ancestors: getAncestorCommits(),
+      serverUrl: serverUrl(),
     }),
   })
 

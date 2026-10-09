@@ -4,6 +4,14 @@ export interface Project {
   slug: string;
   /** Branch whose baselines other branches fall back to (default "main") */
   defaultBranch: string;
+  /** Adapters fail tests on visual changes (off when a commit status reports them) */
+  failTestsOnChanges: boolean;
+  /** GitHub repository ("owner/repo") that gets commit statuses, if configured */
+  githubRepo: string | null;
+  /** GitHub Enterprise Server API URL; null for github.com */
+  githubApiUrl: string | null;
+  /** Whether a GitHub token is stored — the token itself is never returned */
+  githubTokenConfigured: boolean;
   createdAt: string;
 }
 
@@ -66,6 +74,11 @@ export type SnapshotStatus = 'new' | 'unchanged' | 'pending' | 'approved' | 'rej
 export interface SubmittedSnapshot extends Snapshot {
   /** Path of the review page in the web UI, relative to the optik server URL. */
   reviewPath: string;
+  /**
+   * Whether the adapter should fail the test: the snapshot needs review and
+   * the project lets tests fail on changes (see Project.failTestsOnChanges).
+   */
+  failTest: boolean;
 }
 
 export interface CreateProjectDto {
@@ -76,6 +89,13 @@ export interface CreateProjectDto {
 
 export interface UpdateProjectDto {
   defaultBranch?: string;
+  failTestsOnChanges?: boolean;
+  /** "owner/repo"; empty string disables commit statuses */
+  githubRepo?: string;
+  /** Empty string for github.com */
+  githubApiUrl?: string;
+  /** Write-only; empty string removes the stored token */
+  githubToken?: string;
 }
 
 export interface CreateRunDto {
@@ -91,6 +111,8 @@ export interface CreateRunDto {
    * on these commits, which keeps accepted changes on their branch until merged.
    */
   ancestors?: string[];
+  /** optik URL as the adapter reaches it — used for links in commit statuses */
+  serverUrl?: string;
 }
 
 export interface ApiToken {

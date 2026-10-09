@@ -134,6 +134,17 @@ Without history, optik falls back to the latest accepted snapshot on the same br
 
 The branch is detected from the CI system (GitHub Actions, GitLab CI, Bitbucket Pipelines) or git; set `OPTIK_BRANCH` / `OPTIK_COMMIT` to override.
 
+### Commit status on GitHub
+
+optik reports every run as a commit status — `optik/<suite>: 2 visual changes to review`, linking to the review page — and updates it when changes are accepted or rejected. **The check turns green without re-running CI.**
+
+1. Create a token that may write commit statuses: a fine-grained personal access token with *Commit statuses: Read and write* for the repository (or a classic token with `repo:status`).
+2. In optik: *Project → Settings → GitHub commit status* — repository (`owner/repo`), token, and for GitHub Enterprise Server the API URL (`https://github.example.com/api/v3`). The token is stored encrypted and never shown again.
+3. Turn off *Fail tests on visual changes* in the same place, so CI stays green and the status shows what needs review.
+4. In GitHub, make the `optik/<suite>` status a **required check** in the branch protection rules — merging then waits for the review.
+
+Statuses go to the tested commit; for pull requests the adapters report on the PR's head commit. Links use the optik URL the adapters reach (`OPTIK_SERVER_URL`); set `PUBLIC_URL` on the server if users open optik under a different address.
+
 ### Test suites
 
 Each run belongs to a suite: `vitest` and `playwright` by default, configurable with the adapters' `suite` option. Baselines and run merging are per suite, so a project can have component and page tests with equal snapshot names, or several Playwright configs, without them interfering. Give every test config of a project its own suite name.
@@ -348,6 +359,7 @@ Only `DATABASE_URL` is required. Every variable also accepts a `<NAME>_FILE` var
 | `LOGIN_MAX_FAILURES` | `10` | Failed sign-ins per account before it is temporarily blocked |
 | `LOGIN_LOCKOUT_MINUTES` | `15` | Time window for failed sign-ins (and maximum block duration) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Create the admin account on start instead of the setup page (automated installs) |
+| `PUBLIC_URL` | URL the adapters use | Public URL of optik for links in commit statuses |
 | `ORIGIN` | derived from request | Public URL, only needed if a reverse proxy doesn't send `X-Forwarded-Proto` / `X-Forwarded-Host` |
 
 Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL of your optik instance — and optionally `OPTIK_BRANCH` / `OPTIK_COMMIT` to override the detected branch and commit.

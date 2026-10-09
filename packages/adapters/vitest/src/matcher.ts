@@ -71,7 +71,7 @@ export const toMatchSnapshot = {
           : await capture(received)
       const result = await commands.optikSubmit(snapshotName, base64)
 
-      if (result.status === "pending") {
+      if (result.failTest) {
         return { pass: false, message: () => changeMessage(snapshotName, result) }
       }
 
@@ -125,7 +125,7 @@ export async function optikSnapshot(
     trim: !element,
   })
 
-  if (result.status === "pending") {
+  if (result.failTest) {
     throw new Error(changeMessage(name, result))
   }
 }
