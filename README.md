@@ -83,7 +83,7 @@ For Kubernetes, `INSTALL.md` explains how to copy the images into an internal re
 ### Security
 
 - **Images are private.** The API returns signed, expiring image URLs (1–2 h) with every snapshot; image endpoints accept only those or a signed-in user's JWT.
-- **API tokens are stored hashed** (SHA-256); the full token is shown once on creation, the UI shows its prefix.
+- **API and refresh tokens are stored hashed** (SHA-256); an API token is shown once on creation, the UI shows its prefix.
 - **Failed sign-ins are limited per account** (`LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES`), counted in memory per instance.
 - **Security headers**: Content-Security-Policy for the web UI, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS over HTTPS.
 
