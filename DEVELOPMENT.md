@@ -289,7 +289,8 @@ pnpm changeset
    - multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/<owner>/optik:<version>`, `:<major.minor>`, `:latest`, with SBOM and SLSA provenance attestations
    - cosign signature (keyless) and SPDX SBOM attestation
    - Helm chart to `oci://ghcr.io/<owner>/charts/optik`, signed
-   - git tag `v<version>` and GitHub release with notes from the changelog, SBOM and chart attached
+   - air-gapped bundles per architecture ([scripts/airgap-bundle.sh](scripts/airgap-bundle.sh), templates in [docker/airgap/](docker/airgap/)), signed with `cosign sign-blob`
+   - git tag `v<version>` and GitHub release with notes from the changelog; SBOM, chart and bundles attached
 3. Version `0.0.0` is never released, and versions that already have a tag are skipped — re-running the workflow is safe.
 
 After the very first release, make the `optik` and `charts/optik` packages **public** in the GitHub package settings (GHCR packages of personal accounts start private).
