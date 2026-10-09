@@ -47,6 +47,16 @@ export interface CreatedInvitation extends Invitation {
   emailSent: boolean;
 }
 
+/**
+ * Where optik reports commit statuses, and the repository format:
+ * - `github`            "owner/repo"; API URL only for GitHub Enterprise Server
+ * - `gitlab`            "group/project" (subgroups allowed) or the numeric project ID; API URL for self-managed GitLab
+ * - `bitbucket`         Bitbucket Cloud, "workspace/repository"
+ * - `bitbucket_server`  Bitbucket Data Center, "PROJECT/repository"; API URL required
+ * - `azure_devops`      "project/repository"; API URL is the organization or collection URL
+ */
+export type CiProvider = 'github' | 'gitlab' | 'bitbucket' | 'bitbucket_server' | 'azure_devops';
+
 export interface Project {
   id: string;
   name: string;
@@ -55,12 +65,14 @@ export interface Project {
   defaultBranch: string;
   /** Adapters fail tests on visual changes (off when a commit status reports them) */
   failTestsOnChanges: boolean;
-  /** GitHub repository ("owner/repo") that gets commit statuses, if configured */
-  githubRepo: string | null;
-  /** GitHub Enterprise Server API URL; null for github.com */
-  githubApiUrl: string | null;
-  /** Whether a GitHub token is stored — the token itself is never returned */
-  githubTokenConfigured: boolean;
+  /** CI system that gets commit statuses, if configured */
+  ciProvider: CiProvider | null;
+  /** Repository in the provider's format, see CiProvider */
+  ciRepository: string | null;
+  /** API URL for self-hosted servers; null for the provider's cloud service */
+  ciApiUrl: string | null;
+  /** Whether a token is stored — the token itself is never returned */
+  ciTokenConfigured: boolean;
   /** The signed-in user's role in this project */
   myRole: EffectiveProjectRole;
   createdAt: string;
@@ -183,12 +195,17 @@ export interface CreateProjectDto {
 export interface UpdateProjectDto {
   defaultBranch?: string;
   failTestsOnChanges?: boolean;
-  /** "owner/repo"; empty string disables commit statuses */
-  githubRepo?: string;
-  /** Empty string for github.com */
-  githubApiUrl?: string;
-  /** Write-only; empty string removes the stored token */
-  githubToken?: string;
+  /** Empty string turns commit statuses off */
+  ciProvider?: CiProvider | '';
+  ciRepository?: string;
+  /** Empty string for the provider's cloud service */
+  ciApiUrl?: string;
+  /**
+   * Write-only; empty string removes the stored token. Changing the provider
+   * or API URL without a new token removes the stored one as well, so a token
+   * is never sent to another server.
+   */
+  ciToken?: string;
 }
 
 export interface CreateRunDto {
@@ -206,6 +223,8 @@ export interface CreateRunDto {
   ancestors?: string[];
   /** optik URL as the adapter reaches it — used for links in commit statuses */
   serverUrl?: string;
+  /** Pull request ID, where the CI system provides it (Azure Pipelines) */
+  pullRequest?: string;
 }
 
 export interface ApiToken {

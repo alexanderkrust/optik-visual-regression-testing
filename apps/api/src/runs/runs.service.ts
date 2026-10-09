@@ -96,6 +96,8 @@ export class RunsService {
         suite,
         ancestors: commits,
         serverUrl: validUrl(dto.serverUrl),
+        // Only used to report statuses on the pull request; anything else is ignored
+        pullRequest: /^\d{1,10}$/.test(String(dto.pullRequest ?? '')) ? String(dto.pullRequest) : null,
       },
       include: INCLUDE,
     });
