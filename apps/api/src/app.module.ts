@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
 import { StorageModule } from './storage/storage.module';
+import { CiModule } from './ci/ci.module';
 import { ProjectsModule } from './projects/projects.module';
 import { RunsModule } from './runs/runs.module';
 import { SnapshotsModule } from './snapshots/snapshots.module';
@@ -21,6 +22,7 @@ import { AuthModule } from './auth/auth.module';
     }),
     DatabaseModule,
     StorageModule,
+    CiModule,
     ProjectsModule,
     RunsModule,
     SnapshotsModule,

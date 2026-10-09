@@ -2,9 +2,19 @@ import type { SubmittedSnapshot } from "@optik/shared"
 import { authFetch } from "./auth.js"
 import { apiUrl, serverUrl } from "./server.js"
 
-export type SnapshotResult = Pick<SubmittedSnapshot, "status" | "diffScore"> & {
+export type SnapshotResult = Pick<SubmittedSnapshot, "status" | "diffScore" | "failTest"> & {
   /** Absolute link to the review page */
   reviewUrl: string
+}
+
+/**
+ * Whether the test fails: the adapter option wins, then the server's decision
+ * (project setting), then — for older servers — any change fails.
+ */
+function shouldFail(result: SubmittedSnapshot): boolean {
+  const override = process.env._OPTIK_FAIL_ON_CHANGES
+  if (override !== undefined) return override === "true" && result.status === "pending"
+  return result.failTest ?? result.status === "pending"
 }
 
 /**
@@ -45,6 +55,11 @@ export async function submitScreenshot(
     )
   }
 
-  const { status, diffScore, reviewPath } = (await res.json()) as SubmittedSnapshot
-  return { status, diffScore, reviewUrl: serverUrl() + reviewPath }
+  const result = (await res.json()) as SubmittedSnapshot
+  return {
+    status: result.status,
+    diffScore: result.diffScore,
+    failTest: shouldFail(result),
+    reviewUrl: serverUrl() + result.reviewPath,
+  }
 }

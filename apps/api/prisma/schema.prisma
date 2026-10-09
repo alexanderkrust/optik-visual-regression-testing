@@ -13,6 +13,14 @@ model Project {
   /// Branch whose baselines other branches fall back to when the git history
   /// doesn't lead to one (see SnapshotsService.findBaseline)
   defaultBranch String @default("main") @map("default_branch")
+  /// Let tests fail on visual changes. Off when changes are reported as a
+  /// commit status instead (CI stays green, the status blocks the merge).
+  failTestsOnChanges Boolean @default(true) @map("fail_tests_on_changes")
+  /// GitHub commit statuses: "owner/repo", API URL for GitHub Enterprise
+  /// Server (null = github.com) and the token, encrypted (see SecretBox)
+  githubRepo           String? @map("github_repo")
+  githubApiUrl         String? @map("github_api_url")
+  githubTokenEncrypted String? @map("github_token_encrypted")
   createdAt DateTime   @default(now()) @map("created_at")
   runs      Run[]
   tokens    ApiToken[]
@@ -55,6 +63,8 @@ model Run {
   /// baselines come from runs on these commits
   ancestors String[]   @default([])
   status    RunStatus  @default(running)
+  /// optik URL as the adapter reached it — for links in commit statuses
+  serverUrl String?    @map("server_url")
   createdAt DateTime   @default(now()) @map("created_at")
   // Consecutive runs without visual changes are merged into one run:
   // updatedAt is the last time it ran, runCount how often, lastCommitSha the latest commit.
