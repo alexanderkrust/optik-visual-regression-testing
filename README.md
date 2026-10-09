@@ -134,6 +134,20 @@ Without history, optik falls back to the latest accepted snapshot on the same br
 
 The branch is detected from the CI system (GitHub Actions, GitLab CI, Bitbucket Pipelines) or git; set `OPTIK_BRANCH` / `OPTIK_COMMIT` to override.
 
+### Users and roles
+
+The first account (setup page) is an **admin**. Admins invite people under *Users* — optionally straight into a project — and send them the invitation link (valid for 7 days); the invited person chooses a password and is signed in.
+
+| Role | Can |
+|---|---|
+| **admin** (instance) | everything: manage users, create projects, access every project |
+| **member** (instance) | only the projects they are a member of |
+| **viewer** (project) | see runs, snapshots and images |
+| **reviewer** (project) | + accept and reject changes |
+| **maintainer** (project) | + manage members, access tokens and settings |
+
+Projects a user can't access don't exist for them (`404`). Role changes and removed accounts take effect immediately. Every review records who made it; removing a user keeps their reviews.
+
 ### Commit status on GitHub
 
 optik reports every run as a commit status — `optik/<suite>: 2 visual changes to review`, linking to the review page — and updates it when changes are accepted or rejected. **The check turns green without re-running CI.**
@@ -309,6 +323,23 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/auth/login` | Sign in, receive access + refresh tokens |
 | POST | `/api/auth/refresh` | Exchange refresh token for a new access token |
 | POST | `/api/auth/logout` | Revoke refresh token |
+
+### Users (JWT required)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/auth/me` | The signed-in user incl. role |
+| GET | `/api/users` | List users (admin) |
+| PATCH | `/api/users/:id` | Change a user's role (admin) |
+| DELETE | `/api/users/:id` | Remove a user (admin) |
+| POST | `/api/invitations` | Invite by email, optionally into a project (admin) |
+| GET | `/api/invitations` | Pending invitations (admin) |
+| DELETE | `/api/invitations/:id` | Revoke an invitation (admin) |
+| GET | `/api/invitations/token/:token` | Look up an invitation link (public) |
+| POST | `/api/invitations/token/:token/accept` | Set a password and sign in (public) |
+| GET | `/api/projects/:slug/members` | Project members (maintainer) |
+| PUT | `/api/projects/:slug/members` | Add an existing user / change their role (maintainer) |
+| DELETE | `/api/projects/:slug/members/:userId` | Remove a member (maintainer) |
 
 ### Projects & runs (JWT required)
 

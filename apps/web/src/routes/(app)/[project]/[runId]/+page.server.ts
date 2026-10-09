@@ -5,11 +5,13 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async (event) => {
   const api = serverApi(event.locals);
   try {
-    const [run, snapshots] = await Promise.all([
+    const [project, run, snapshots] = await Promise.all([
+      api.projects.get(event.params.project),
       api.runs.get(event.params.runId),
       api.snapshots.list(event.params.runId),
     ]);
-    return { run, snapshots, projectSlug: event.params.project, runId: event.params.runId };
+    const canReview = project.myRole !== 'viewer';
+    return { run, snapshots, canReview, projectSlug: event.params.project, runId: event.params.runId };
   } catch (e) {
     if (e instanceof Error && e.message.startsWith('404')) {
       // Runs without visual changes are merged into the previous run of their branch
