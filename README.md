@@ -111,7 +111,28 @@ For working on optik itself see [DEVELOPMENT.md](DEVELOPMENT.md); for what's pla
 
 ## How reviews work
 
-Every snapshot is compared pixel by pixel with its **baseline** — the most recently accepted snapshot of the same name in the same **test suite** of the project.
+Every snapshot is compared pixel by pixel with its **baseline** — the most recently accepted snapshot of the same name in the same **test suite**, found through the git history (see [Branches](#branches)).
+
+### Branches
+
+The adapters send the commit and its git ancestors with every run. The baseline is the latest accepted snapshot from a run on one of these commits, so — like in Chromatic:
+
+- a feature branch compares against the state it was branched from, not against later changes on `main`;
+- accepting a change on a branch affects only that branch;
+- a **merge commit** carries the branch's accepted changes over to `main`;
+- after a **squash or rebase merge** the history is lost — so a snapshot that is pixel-identical to an already approved one is **accepted automatically** (shown as such in the UI) instead of asking for a second review.
+
+**Fetch the git history in CI.** Most CI systems clone shallowly; with GitHub Actions use:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+```
+
+Without history, optik falls back to the latest accepted snapshot on the same branch, then on the project's **default branch** (`main` unless changed under *Project → Settings*).
+
+The branch is detected from the CI system (GitHub Actions, GitLab CI, Bitbucket Pipelines) or git; set `OPTIK_BRANCH` / `OPTIK_COMMIT` to override.
 
 ### Test suites
 
@@ -290,6 +311,8 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/projects/:slug/tokens` | Create an API token |
 | DELETE | `/api/projects/:slug/tokens/:id` | Revoke an API token |
 | PATCH | `/api/snapshots/:id/status` | Accept (`approved`) or reject (`rejected`) a visual change |
+| GET | `/api/projects/:slug` | Get a project |
+| PATCH | `/api/projects/:slug` | Update project settings (`defaultBranch`) |
 
 ### Adapter endpoints (API token required)
 
@@ -327,7 +350,7 @@ Only `DATABASE_URL` is required. Every variable also accepts a `<NAME>_FILE` var
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Create the admin account on start instead of the setup page (automated installs) |
 | `ORIGIN` | derived from request | Public URL, only needed if a reverse proxy doesn't send `X-Forwarded-Proto` / `X-Forwarded-Host` |
 
-Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL of your optik instance.
+Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL of your optik instance — and optionally `OPTIK_BRANCH` / `OPTIK_COMMIT` to override the detected branch and commit.
 
 ---
 

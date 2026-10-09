@@ -2,6 +2,8 @@ export interface Project {
   id: string;
   name: string;
   slug: string;
+  /** Branch whose baselines other branches fall back to (default "main") */
+  defaultBranch: string;
   createdAt: string;
 }
 
@@ -44,6 +46,11 @@ export interface Snapshot {
   baselineImageUrl: string | null;
   /** Signed URL of the diff image, for snapshots that differ from their baseline */
   diffUrl: string | null;
+  /**
+   * Set when the change was accepted automatically because the same image was
+   * already approved — the id of that approved snapshot.
+   */
+  autoApprovedFromId: string | null;
 }
 
 /**
@@ -64,6 +71,11 @@ export interface SubmittedSnapshot extends Snapshot {
 export interface CreateProjectDto {
   name: string;
   slug: string;
+  defaultBranch?: string;
+}
+
+export interface UpdateProjectDto {
+  defaultBranch?: string;
 }
 
 export interface CreateRunDto {
@@ -74,6 +86,11 @@ export interface CreateRunDto {
    * are kept per suite. Defaults to "default".
    */
   suite?: string;
+  /**
+   * The commit and its git ancestors, newest first. Baselines come from runs
+   * on these commits, which keeps accepted changes on their branch until merged.
+   */
+  ancestors?: string[];
 }
 
 export interface ApiToken {
