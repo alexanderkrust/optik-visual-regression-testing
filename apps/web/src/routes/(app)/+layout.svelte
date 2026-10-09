@@ -2,7 +2,7 @@
   import '../../app.css';
   import type { Snippet } from 'svelte';
   import { page } from '$app/state';
-  import { LayoutDashboard, FolderOpen, LogOut, Users } from 'lucide-svelte';
+  import { LayoutDashboard, FolderOpen, LogOut, Users, KeyRound, TriangleAlert } from 'lucide-svelte';
   import type { LayoutData } from './$types';
 
   let { children, data }: { children: Snippet; data: LayoutData } = $props();
@@ -10,8 +10,14 @@
   const navItems = $derived([
     { label: 'Dashboard', href: '/', icon: LayoutDashboard },
     { label: 'Projects', href: '/projects', icon: FolderOpen },
-    ...(data.user.role === 'admin' ? [{ label: 'Users', href: '/users', icon: Users }] : []),
+    ...(data.user.role === 'admin'
+      ? [
+          { label: 'Users', href: '/users', icon: Users },
+          { label: 'License', href: '/license', icon: KeyRound },
+        ]
+      : []),
   ]);
+  const licenseNotices = $derived([...(data.license?.problems ?? []), ...(data.license?.warnings ?? [])]);
 
   function isActive(href: string): boolean {
     const pathname = page.url.pathname;
@@ -77,6 +83,15 @@
     </nav>
   </aside>
   <main class="flex-1 min-w-0 pl-60">
+    {#if licenseNotices.length > 0 && !page.url.pathname.startsWith('/license')}
+      <a
+        href="/license"
+        class="flex items-start gap-2 border-b border-amber-300 bg-amber-50 px-8 py-2 text-sm text-amber-900 hover:bg-amber-100"
+      >
+        <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
+        <span>{licenseNotices[0]}{#if licenseNotices.length > 1} (+{licenseNotices.length - 1} more){/if}</span>
+      </a>
+    {/if}
     <div class="px-8 py-8">
       {@render children()}
     </div>

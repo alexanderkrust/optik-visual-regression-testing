@@ -84,6 +84,8 @@ jobs:
             echo "IMAGE=ghcr.io/$owner/optik"
             echo "CHART_REPO=ghcr.io/$owner/charts"
             echo "MINOR=${VERSION%.*}"
+            # Licenses unlock releases built within their update period
+            echo "RELEASE_DATE=$(date -u +%F)"
           } >> "$GITHUB_ENV"
 
       # ── Image ──────────────────────────────────────────────────────────────
@@ -101,6 +103,9 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            OPTIK_VERSION=${{ env.VERSION }}
+            OPTIK_RELEASE_DATE=${{ env.RELEASE_DATE }}
           tags: |
             ${{ env.IMAGE }}:${{ env.VERSION }}
             ${{ env.IMAGE }}:${{ env.MINOR }}
