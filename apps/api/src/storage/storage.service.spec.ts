@@ -26,6 +26,13 @@ describe('StorageService with local files', () => {
     await expect(storage.get('runs/r1/missing.png')).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('deletes images and ignores missing ones', async () => {
+    await storage.put('runs/r1/s2.png', Buffer.from('x'));
+    await storage.delete(['runs/r1/s2.png', 'runs/r1/missing.png']);
+    await expect(storage.get('runs/r1/s2.png')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(storage.delete(['../outside.png'])).rejects.toThrow(/Invalid storage key/);
+  });
+
   it('is ready when the directory exists', async () => {
     expect(await storage.ping()).toBe(true);
   });

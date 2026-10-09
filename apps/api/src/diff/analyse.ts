@@ -1,9 +1,11 @@
 import { PNG } from 'pngjs';
-import { diffImages, hashImage } from '@optik/core';
+import { diffImages, hashImage, type Region } from '@optik/core';
 
 export interface AnalyseInput {
   image: Uint8Array;
   baseline: Uint8Array | null;
+  /** Areas whose changes don't count */
+  ignoreRegions?: Region[];
 }
 
 export interface AnalyseResult {
@@ -25,12 +27,12 @@ const toBuffer = (data: Uint8Array) => Buffer.from(data.buffer, data.byteOffset,
  * pixels and compare it with the baseline. Runs in a worker thread (see
  * DiffService); throws for images that are not valid PNGs.
  */
-export function analyse({ image, baseline }: AnalyseInput): AnalyseResult {
+export function analyse({ image, baseline, ignoreRegions }: AnalyseInput): AnalyseResult {
   const current = PNG.sync.read(toBuffer(image));
   const imageHash = hashImage(current);
   if (!baseline) return { imageHash, diff: null };
 
-  const result = diffImages(PNG.sync.read(toBuffer(baseline)), current);
+  const result = diffImages(PNG.sync.read(toBuffer(baseline)), current, { ignoreRegions });
   return {
     imageHash,
     diff: {

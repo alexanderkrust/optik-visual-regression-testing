@@ -113,6 +113,45 @@ export interface Snapshot {
   /** Who accepted or rejected the change, and when */
   reviewedBy: string | null;
   reviewedAt: string | null;
+  /** Current review settings of this snapshot name (project and suite) */
+  settings: SnapshotSettings;
+  commentCount: number;
+}
+
+/** A rectangle in image pixels (top-left origin). */
+export interface IgnoreRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Review settings of a snapshot name within a project and suite, applied to
+ * every comparison. `PUT /snapshots/:id/settings`.
+ */
+export interface SnapshotSettings {
+  /** Areas whose changes are ignored, e.g. dates or animations */
+  ignoreRegions: IgnoreRegion[];
+  /**
+   * Share of pixels (0–1) that may change while the snapshot still counts as
+   * unchanged. Size changes always count.
+   */
+  threshold: number;
+}
+
+export interface SnapshotComment {
+  id: string;
+  snapshotId: string;
+  /** E-mail of the author; null if the account was removed */
+  author: string | null;
+  authorId: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface CreateSnapshotCommentDto {
+  body: string;
 }
 
 /**

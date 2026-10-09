@@ -76,7 +76,7 @@
       </div>
     </nav>
   </aside>
-  <main class="flex-1 pl-60">
+  <main class="flex-1 min-w-0 pl-60">
     <div class="px-8 py-8">
       {@render children()}
     </div>

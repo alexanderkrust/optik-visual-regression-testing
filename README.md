@@ -208,12 +208,19 @@ Runs from before suites existed are in the `default` suite. Other suites fall ba
 | Identical to the baseline | `unchanged` | passes |
 | Any pixel or the size differs | `changed` — needs review | **fails**, with a link to the review page |
 
-Review changes in the web UI on the run page, which shows **before / after** side by side and a diff view. Accept and reject are only offered for snapshots with visual changes:
+Review changes in the web UI on the run page. Accept and reject are only offered for snapshots with visual changes:
 
 - **Accept** — the new image becomes the baseline. The next run with the same image passes.
 - **Reject** — the previous baseline stays. Runs keep failing until the UI matches the baseline again or a change is accepted.
 
 An unreviewed change keeps failing in later runs as well.
+
+### Reviewing changes
+
+- **Views:** side by side (scrolling together), slider, overlay (fade between before and after) and diff. Zoom fits large screenshots to the page or shows them at 25–400 %.
+- **Keyboard:** `J`/`K` next/previous snapshot, `1`–`4` views, `A` accept, `R` reject, `Z` zoom, `I` ignore regions, `C` comment, `?` all shortcuts.
+- **Comments** on every snapshot — written by reviewers, read by everyone in the project.
+- **Ignore regions and threshold** (*Ignore regions*, reviewers): drag rectangles over areas whose changes don't count — dates, animations, ads — and set the share of pixels that may change. They apply to the snapshot name in every later run of the project and suite, and open changes are checked again right away: a change that no longer counts becomes `unchanged`, and the commit status turns green without re-running CI. Size changes always count. Changes within the threshold keep their image and diff, so you can see what was tolerated.
 
 ### Runs without changes are merged
 
@@ -390,6 +397,10 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/projects/:slug/tokens` | Create an API token |
 | DELETE | `/api/projects/:slug/tokens/:id` | Revoke an API token |
 | PATCH | `/api/snapshots/:id/status` | Accept (`approved`) or reject (`rejected`) a visual change |
+| PUT | `/api/snapshots/:id/settings` | Ignore regions and threshold for the snapshot's name (reviewer) |
+| GET | `/api/snapshots/:id/comments` | Comments on a snapshot |
+| POST | `/api/snapshots/:id/comments` | Add a comment (reviewer) |
+| DELETE | `/api/snapshots/:id/comments/:commentId` | Delete a comment (author or maintainer) |
 | GET | `/api/projects/:slug` | Get a project |
 | PATCH | `/api/projects/:slug` | Update project settings (`defaultBranch`) |
 | GET | `/api/projects/:slug/notifications` | Notification channels (maintainer) |
