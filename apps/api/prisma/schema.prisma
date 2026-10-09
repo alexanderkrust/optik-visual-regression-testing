@@ -10,6 +10,9 @@ model Project {
   id        String     @id @default(uuid())
   name      String
   slug      String     @unique
+  /// Branch whose baselines other branches fall back to when the git history
+  /// doesn't lead to one (see SnapshotsService.findBaseline)
+  defaultBranch String @default("main") @map("default_branch")
   createdAt DateTime   @default(now()) @map("created_at")
   runs      Run[]
   tokens    ApiToken[]
@@ -48,6 +51,9 @@ model Run {
   /// merged and baselines are kept per suite. "default" for runs before suites.
   suite     String     @default("default")
   commitSha String     @map("commit_sha")
+  /// The commit and its ancestors, newest first (sent by the adapters) —
+  /// baselines come from runs on these commits
+  ancestors String[]   @default([])
   status    RunStatus  @default(running)
   createdAt DateTime   @default(now()) @map("created_at")
   // Consecutive runs without visual changes are merged into one run:
@@ -79,8 +85,14 @@ model Snapshot {
   baselineId String?        @map("baseline_id")
   children   Snapshot[]     @relation("baseline")
   diffScore  Float?         @map("diff_score")
+  /// SHA-256 of the decoded pixels — finds identical, already approved images
+  imageHash  String?        @map("image_hash")
+  /// Set when the snapshot was accepted automatically because an identical
+  /// image was already approved (e.g. on the branch a squash merge came from)
+  autoApprovedFromId String? @map("auto_approved_from_id")
   createdAt  DateTime       @default(now()) @map("created_at")
 
+  @@index([name, imageHash])
   @@map("snapshots")
 }
 

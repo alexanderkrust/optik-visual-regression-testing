@@ -179,7 +179,10 @@
         <div>
           <h2 class="text-lg font-semibold">{selected.name}</h2>
           <p class="text-muted-foreground text-sm mt-0.5">
-            {#if isChange(selected)}
+            {#if selected.autoApprovedFromId}
+              {percent(selected.diffScore, 3)} of pixels changed · accepted automatically — the same
+              image was already approved (e.g. on the branch it was merged from)
+            {:else if isChange(selected)}
               {percent(selected.diffScore, 3)} of pixels changed
             {:else if selected.status === 'new'}
               First snapshot — used as the baseline

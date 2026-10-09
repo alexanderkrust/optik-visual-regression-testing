@@ -168,6 +168,7 @@
   <TabsList class="mb-6">
     <TabsTrigger value="runs">Runs</TabsTrigger>
     <TabsTrigger value="tokens">Access Tokens</TabsTrigger>
+    <TabsTrigger value="settings">Settings</TabsTrigger>
   </TabsList>
 
   <!-- Runs tab -->
@@ -455,6 +456,36 @@
         </Table>
       </Card>
     {/if}
+  </TabsContent>
+
+  <!-- Settings tab -->
+  <TabsContent value="settings">
+    <Card>
+      <CardContent class="p-6">
+        <form method="POST" action="?/updateSettings" use:enhance class="space-y-4 max-w-md">
+          <div class="space-y-1.5">
+            <Label for="default-branch">Default branch</Label>
+            <Input
+              id="default-branch"
+              name="defaultBranch"
+              value={data.project.defaultBranch}
+              class="font-mono"
+              required
+            />
+            <p class="text-xs text-muted-foreground">
+              Baselines come from the git history of each run. When a run has no usable history
+              (e.g. a shallow clone in CI), optik falls back to its own branch and then to this one.
+            </p>
+          </div>
+          {#if form && 'settingsError' in form}
+            <p class="text-sm text-destructive">{(form as { settingsError: string }).settingsError}</p>
+          {:else if form && 'settingsSaved' in form}
+            <p class="text-sm text-green-700">Saved.</p>
+          {/if}
+          <Button type="submit" size="sm">Save</Button>
+        </form>
+      </CardContent>
+    </Card>
   </TabsContent>
 </Tabs>
 

@@ -11,6 +11,8 @@ const CHANGE_STATUSES = ['pending', 'approved', 'rejected'];
 export const DEFAULT_SUITE = 'default';
 
 const SUITE_PATTERN = /^[A-Za-z0-9._/-]{1,64}$/;
+const COMMIT_PATTERN = /^[0-9a-f]{7,64}$/i;
+const MAX_ANCESTORS = 1000;
 
 const INCLUDE = {
   project: { select: { slug: true } },
@@ -58,8 +60,27 @@ export class RunsService {
         'suite must be 1–64 characters: letters, digits, ".", "_", "/" or "-"',
       );
     }
+    const ancestors = dto.ancestors ?? [];
+    if (
+      !Array.isArray(ancestors) ||
+      ancestors.length > MAX_ANCESTORS ||
+      !ancestors.every((sha) => typeof sha === 'string' && COMMIT_PATTERN.test(sha))
+    ) {
+      throw new BadRequestException(`ancestors must be up to ${MAX_ANCESTORS} commit SHAs`);
+    }
+    // The run's own commit counts too: e.g. a re-run after accepting a change
+    const commits = COMMIT_PATTERN.test(dto.commitSha ?? '')
+      ? [dto.commitSha, ...ancestors.filter((sha) => sha !== dto.commitSha)]
+      : ancestors;
+
     const row = await this.prisma.run.create({
-      data: { projectId: project.id, branch: dto.branch, commitSha: dto.commitSha, suite },
+      data: {
+        projectId: project.id,
+        branch: dto.branch,
+        commitSha: dto.commitSha,
+        suite,
+        ancestors: commits,
+      },
       include: INCLUDE,
     });
     return toDto(row);

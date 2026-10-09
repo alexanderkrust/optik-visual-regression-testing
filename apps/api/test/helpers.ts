@@ -128,8 +128,11 @@ export class AdapterClient {
     private readonly token: string,
   ) {}
 
-  startRun(branch = 'main', commitSha = 'abc1234', suite?: string) {
-    return call(`${this.api}/runs`, { token: this.token, json: { branch, commitSha, suite } });
+  startRun(branch = 'main', commitSha = 'abc1234', suite?: string, ancestors?: string[]) {
+    return call(`${this.api}/runs`, {
+      token: this.token,
+      json: { branch, commitSha, suite, ancestors },
+    });
   }
 
   submit(runId: string, name: string, image: Buffer) {

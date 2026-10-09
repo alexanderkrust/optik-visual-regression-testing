@@ -5,11 +5,12 @@ import type { PageServerLoad, Actions } from './$types';
 export const load: PageServerLoad = async (event) => {
   const api = serverApi(event.locals);
   try {
-    const [runs, tokens] = await Promise.all([
+    const [project, runs, tokens] = await Promise.all([
+      api.projects.get(event.params.project),
       api.runs.list(event.params.project),
       api.tokens.list(event.params.project),
     ]);
-    return { runs, tokens, projectSlug: event.params.project };
+    return { project, runs, tokens, projectSlug: event.params.project };
   } catch (e) {
     console.error(`[load] Failed to fetch project data for ${event.params.project}:`, e);
     throw error(503, 'API unavailable — make sure the API server is running');
@@ -34,6 +35,24 @@ export const actions: Actions = {
       if (msg.includes('503') || msg.toLowerCase().includes('fetch'))
         return fail(502, { tokenError: 'Could not reach the API. Make sure the server is running.' });
       return fail(500, { tokenError: `Failed to create token: ${msg}` });
+    }
+  },
+
+  updateSettings: async (event) => {
+    const api = serverApi(event.locals);
+    const data = await event.request.formData();
+    const defaultBranch = (data.get('defaultBranch') as string | null)?.trim() ?? '';
+    if (!defaultBranch) return fail(400, { settingsError: 'The default branch is required' });
+
+    try {
+      await api.projects.update(event.params.project, { defaultBranch });
+      return { settingsSaved: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.startsWith('400')) {
+        return fail(400, { settingsError: 'That is not a valid git branch name' });
+      }
+      return fail(500, { settingsError: `Failed to save: ${msg}` });
     }
   },
 
