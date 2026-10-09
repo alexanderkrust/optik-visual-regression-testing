@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ProjectsService } from '../projects/projects.service';
+import { CommitStatusService } from '../ci/commit-status.service';
 import type { Run, CreateRunDto } from '@optik/shared';
 import type { Run as PrismaRun, Snapshot as PrismaSnapshot } from '@prisma/client';
 
@@ -31,6 +32,7 @@ export class RunsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly projectsService: ProjectsService,
+    private readonly commitStatus: CommitStatusService,
   ) {}
 
   async findByProject(projectSlug: string): Promise<Run[]> {
@@ -80,9 +82,11 @@ export class RunsService {
         commitSha: dto.commitSha,
         suite,
         ancestors: commits,
+        serverUrl: validUrl(dto.serverUrl),
       },
       include: INCLUDE,
     });
+    await this.commitStatus.reportRun(row.id);
     return toDto(row);
   }
 
@@ -101,6 +105,10 @@ export class RunsService {
 
     const target = await this.findMergeTarget(run);
     if (target) {
+      // The merged run disappears, but its commit still needs a (green) status
+      const project = await this.prisma.project.findUniqueOrThrow({ where: { id: run.projectId } });
+      await this.commitStatus.report({ ...run, project }, 'success', 'No visual changes', target.id);
+
       const [, , merged] = await this.prisma.$transaction([
         this.prisma.snapshot.deleteMany({ where: { runId: id } }),
         this.prisma.run.delete({ where: { id } }),
@@ -118,6 +126,7 @@ export class RunsService {
       data: { status: 'complete' },
       include: INCLUDE,
     });
+    await this.commitStatus.reportRun(id);
     return toDto(row);
   }
 
@@ -141,6 +150,17 @@ export class RunsService {
       previous.snapshots.length > 0 &&
       !previous.snapshots.some((s) => CHANGE_STATUSES.includes(s.status));
     return previousIsClean ? previous : null;
+  }
+}
+
+/** The optik URL the adapter used, if it is a plain http(s) URL. */
+function validUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : null;
+  } catch {
+    return null;
   }
 }
 

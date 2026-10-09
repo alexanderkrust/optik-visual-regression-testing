@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process';
+import { readFileSync } from 'fs';
 
 /**
  * Variables CI systems set to the branch being built, most specific first.
@@ -40,8 +41,29 @@ export function getCurrentBranch(env: NodeJS.ProcessEnv = process.env): string {
   return env.CI_BRANCH?.trim() || 'unknown';
 }
 
+/**
+ * The commit being tested. For GitHub pull requests that is the PR's head
+ * commit — Actions checks out a temporary merge commit, but statuses must be
+ * reported on the head commit to show up on the pull request.
+ */
 export function getCurrentCommit(env: NodeJS.ProcessEnv = process.env): string {
-  return env.OPTIK_COMMIT?.trim() || git('rev-parse', 'HEAD') || env.CI_COMMIT || 'unknown';
+  return (
+    env.OPTIK_COMMIT?.trim() ||
+    githubPullRequestHead(env) ||
+    git('rev-parse', 'HEAD') ||
+    env.CI_COMMIT ||
+    'unknown'
+  );
+}
+
+function githubPullRequestHead(env: NodeJS.ProcessEnv): string | null {
+  if (!env.GITHUB_EVENT_NAME?.startsWith('pull_request') || !env.GITHUB_EVENT_PATH) return null;
+  try {
+    const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
+    return event.pull_request?.head?.sha ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
