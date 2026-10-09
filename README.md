@@ -111,7 +111,13 @@ For working on optik itself see [DEVELOPMENT.md](DEVELOPMENT.md); for what's pla
 
 ## How reviews work
 
-Every snapshot is compared pixel by pixel with its **baseline** — the most recently accepted snapshot of the same name in the project.
+Every snapshot is compared pixel by pixel with its **baseline** — the most recently accepted snapshot of the same name in the same **test suite** of the project.
+
+### Test suites
+
+Each run belongs to a suite: `vitest` and `playwright` by default, configurable with the adapters' `suite` option. Baselines and run merging are per suite, so a project can have component and page tests with equal snapshot names, or several Playwright configs, without them interfering. Give every test config of a project its own suite name.
+
+Runs from before suites existed are in the `default` suite. Other suites fall back to its baselines until they have their own, so existing reviews carry over.
 
 | Result | Status | Test |
 |--------|--------|------|
@@ -128,7 +134,7 @@ An unreviewed change keeps failing in later runs as well.
 
 ### Runs without changes are merged
 
-Only runs that matter for review are kept. When a run finishes and all its snapshots are `unchanged`, it is merged into the previous run of the same branch — as long as that one had no visual changes either. The new run is not stored; the previous one gets its *last run* time (`updatedAt`), a run counter and the latest commit updated. Images of unchanged snapshots are never stored, since they equal the baseline.
+Only runs that matter for review are kept. When a run finishes and all its snapshots are `unchanged`, it is merged into the previous run of the same suite and branch — as long as that one had no visual changes either. The new run is not stored; the previous one gets its *last run* time (`updatedAt`), a run counter and the latest commit updated. Images of unchanged snapshots are never stored, since they equal the baseline.
 
 So the run list shows: one entry per stretch of clean runs, every run with changes, and — after a change was reviewed — the next clean run as a new entry again.
 
@@ -155,6 +161,8 @@ export default defineConfig({
     optik({
       token: process.env.OPTIK_TOKEN!,     // project-scoped API token from the UI
       serverUrl: 'https://optik.example.com', // URL of your optik instance, defaults to OPTIK_SERVER_URL or http://localhost:3000
+    suite: 'e2e',                           // optional, defaults to "playwright"
+      suite: 'components',                // optional, defaults to "vitest"
     }),
   ],
   test: {
