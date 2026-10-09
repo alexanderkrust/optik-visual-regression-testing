@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { ProjectsService } from '../projects/projects.service';
 import { CommitStatusService } from '../ci/commit-status.service';
 import { AccessService, CurrentUser } from '../access/access.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { Run, CreateRunDto } from '@optik/shared';
 import type { Run as PrismaRun, Snapshot as PrismaSnapshot } from '@prisma/client';
 
@@ -35,6 +36,7 @@ export class RunsService {
     private readonly projectsService: ProjectsService,
     private readonly commitStatus: CommitStatusService,
     private readonly access: AccessService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async findByProject(user: CurrentUser, projectSlug: string): Promise<Run[]> {
@@ -135,7 +137,9 @@ export class RunsService {
       include: INCLUDE,
     });
     await this.commitStatus.reportRun(id);
-    return toDto(row);
+    const completed = toDto(row);
+    if (completed.pendingCount > 0) await this.notifications.notifyRun(id, 'run.needs_review');
+    return completed;
   }
 
   private async findMergeTarget(run: RunWithCounts) {

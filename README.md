@@ -136,7 +136,7 @@ The branch is detected from the CI system (GitHub Actions, GitLab CI, Bitbucket 
 
 ### Users and roles
 
-The first account (setup page) is an **admin**. Admins invite people under *Users* — optionally straight into a project — and send them the invitation link (valid for 7 days); the invited person chooses a password and is signed in.
+The first account (setup page) is an **admin**. Admins invite people under *Users* — optionally straight into a project. With SMTP configured (`SMTP_URL`) optik e-mails the invitation link; otherwise the admin sends the link themselves. It is valid for 7 days; the invited person chooses a password and is signed in.
 
 | Role | Can |
 |---|---|
@@ -158,6 +158,43 @@ optik reports every run as a commit status — `optik/<suite>: 2 visual changes 
 4. In GitHub, make the `optik/<suite>` status a **required check** in the branch protection rules — merging then waits for the review.
 
 Statuses go to the tested commit; for pull requests the adapters report on the PR's head commit. Links use the optik URL the adapters reach (`OPTIK_SERVER_URL`); set `PUBLIC_URL` on the server if users open optik under a different address.
+
+### Notifications
+
+Maintainers add channels under *Project → Settings → Notifications*. Each channel gets one or both events:
+
+| Event | When |
+|---|---|
+| `run.needs_review` | a run finished with visual changes to review |
+| `run.reviewed` | the last pending change of a run was accepted or rejected |
+
+| Channel | Target |
+|---|---|
+| **Slack** | an [incoming webhook](https://api.slack.com/messaging/webhooks) URL |
+| **Microsoft Teams** | a *Workflows* webhook URL ("Post to a channel when a webhook request is received") |
+| **E-mail** | one or more addresses; needs `SMTP_URL` on the server |
+| **Webhook** | any HTTP(S) URL — receives JSON |
+
+URLs are stored encrypted and shown shortened. *Send test* checks a channel. Delivery is best effort: a failing receiver is logged, not retried.
+
+Webhooks get a `POST` with the headers `X-Optik-Event` and `X-Optik-Signature: sha256=<hex>` — an HMAC-SHA256 of the raw body with the channel's secret, which is shown once when the channel is created:
+
+```json
+{
+  "event": "run.needs_review",
+  "project": { "slug": "shop", "name": "Shop" },
+  "run": { "id": "…", "branch": "feature/cart", "suite": "vitest", "commitSha": "…", "pendingCount": 2, "changedCount": 2 },
+  "reviewUrl": "https://optik.example.com/shop/…"
+}
+```
+
+```js
+const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+const received = Buffer.from(req.headers['x-optik-signature'] ?? '');
+const valid = received.length === expected.length && crypto.timingSafeEqual(received, Buffer.from(expected));
+```
+
+Links point to `PUBLIC_URL`, or else to the URL the adapters used (`OPTIK_SERVER_URL`).
 
 ### Test suites
 
@@ -355,6 +392,10 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | PATCH | `/api/snapshots/:id/status` | Accept (`approved`) or reject (`rejected`) a visual change |
 | GET | `/api/projects/:slug` | Get a project |
 | PATCH | `/api/projects/:slug` | Update project settings (`defaultBranch`) |
+| GET | `/api/projects/:slug/notifications` | Notification channels (maintainer) |
+| POST | `/api/projects/:slug/notifications` | Add a channel (maintainer) |
+| DELETE | `/api/projects/:slug/notifications/:id` | Remove a channel (maintainer) |
+| POST | `/api/projects/:slug/notifications/:id/test` | Send a test notification (maintainer) |
 
 ### Adapter endpoints (API token required)
 
@@ -391,7 +432,9 @@ Only `DATABASE_URL` is required. Every variable also accepts a `<NAME>_FILE` var
 | `LOGIN_MAX_FAILURES` | `10` | Failed sign-ins per account before it is temporarily blocked |
 | `LOGIN_LOCKOUT_MINUTES` | `15` | Time window for failed sign-ins (and maximum block duration) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Create the admin account on start instead of the setup page (automated installs) |
-| `PUBLIC_URL` | URL the adapters use | Public URL of optik for links in commit statuses |
+| `PUBLIC_URL` | URL the adapters use | Public URL of optik for links in commit statuses, notifications and invitation e-mails |
+| `SMTP_URL` | — | SMTP server for e-mail notifications and invitations, e.g. `smtps://user:pass@mail.example.com:465` or `smtp://mail.example.com:587` |
+| `SMTP_FROM` | `optik <optik@localhost>` | Sender of e-mails |
 | `ORIGIN` | derived from request | Public URL, only needed if a reverse proxy doesn't send `X-Forwarded-Proto` / `X-Forwarded-Host` |
 
 Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL of your optik instance — and optionally `OPTIK_BRANCH` / `OPTIK_COMMIT` to override the detected branch and commit.

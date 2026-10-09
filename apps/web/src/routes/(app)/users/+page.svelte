@@ -84,7 +84,12 @@
     {#if form && 'inviteLink' in form}
       <div class="mt-4 rounded-md border bg-muted/50 p-3 space-y-2">
         <p class="text-sm">
-          Send this link to <strong>{form.invitedEmail}</strong>. It is valid for 7 days and shown only once.
+          {#if form.emailSent}
+            Invitation e-mail sent to <strong>{form.invitedEmail}</strong>. You can also share the link
+            yourself — it is valid for 7 days and shown only once.
+          {:else}
+            Send this link to <strong>{form.invitedEmail}</strong>. It is valid for 7 days and shown only once.
+          {/if}
         </p>
         <div class="flex items-center gap-2">
           <code class="flex-1 truncate rounded bg-background px-2 py-1 text-xs font-mono select-all">{form.inviteLink}</code>

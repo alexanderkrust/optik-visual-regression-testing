@@ -609,6 +609,80 @@
         </form>
       </CardContent>
     </Card>
+
+    <Card class="mt-4">
+      <CardContent class="p-6 space-y-4">
+        <div class="space-y-1">
+          <h3 class="text-sm font-semibold">Notifications</h3>
+          <p class="text-xs text-muted-foreground">
+            Tell your team when a run has visual changes to review, and when the review is done.
+          </p>
+        </div>
+
+        {#if data.channels.length > 0}
+          <ul class="divide-y rounded-md border">
+            {#each data.channels as channel (channel.id)}
+              <li class="flex items-center gap-3 px-3 py-2 text-sm">
+                <Badge variant="outline" class="capitalize">{channel.type}</Badge>
+                <span class="flex-1 truncate font-mono text-xs">{channel.label}</span>
+                <span class="text-xs text-muted-foreground">
+                  {channel.events.map((e) => (e === 'run.needs_review' ? 'changes' : 'reviewed')).join(' · ')}
+                </span>
+                {#if form && 'testedChannel' in form && form.testedChannel === channel.id}
+                  <span class="text-xs {form.delivered ? 'text-green-700' : 'text-destructive'}">
+                    {form.delivered ? 'Delivered' : 'Failed — see server log'}
+                  </span>
+                {/if}
+                <form method="POST" action="?/testChannel" use:enhance>
+                  <input type="hidden" name="id" value={channel.id} />
+                  <Button type="submit" variant="outline" size="sm">Send test</Button>
+                </form>
+                <form method="POST" action="?/removeChannel" use:enhance>
+                  <input type="hidden" name="id" value={channel.id} />
+                  <Button type="submit" variant="ghost" size="sm" aria-label="Remove {channel.type} channel">
+                    <Trash2 class="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </form>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
+        <form method="POST" action="?/addChannel" use:enhance class="flex flex-wrap items-end gap-3">
+          <div class="flex flex-col gap-1.5">
+            <Label for="channel-type">Type</Label>
+            <select id="channel-type" name="type" class={selectClass}>
+              <option value="slack">Slack</option>
+              <option value="teams">Microsoft Teams</option>
+              <option value="webhook">Webhook</option>
+              <option value="email">E-mail</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1.5 flex-1 min-w-64">
+            <Label for="channel-target">Webhook URL or e-mail addresses</Label>
+            <Input id="channel-target" name="target" required placeholder="https://hooks.slack.com/services/…" class="font-mono" />
+          </div>
+          <div class="flex items-center gap-3 text-sm pb-2">
+            <label class="flex items-center gap-1.5"><input type="checkbox" name="events" value="run.needs_review" checked /> Changes</label>
+            <label class="flex items-center gap-1.5"><input type="checkbox" name="events" value="run.reviewed" checked /> Reviewed</label>
+          </div>
+          <Button type="submit" size="sm">Add</Button>
+        </form>
+        <p class="text-xs text-muted-foreground">
+          Slack: an incoming webhook. Teams: a "Workflows" webhook (Post to a channel when a webhook
+          request is received). E-mail needs SMTP on the server. Webhook URLs are stored encrypted.
+        </p>
+        {#if form && 'channelError' in form}
+          <p class="text-sm text-destructive">{(form as { channelError: string }).channelError}</p>
+        {/if}
+        {#if form && 'webhookSecret' in form && form.webhookSecret}
+          <div class="rounded-md border bg-muted/50 p-3 text-sm space-y-1">
+            <p>Webhook secret — shown only once. Verify the <code>X-Optik-Signature</code> header (HMAC-SHA256 of the body) with it:</p>
+            <code class="block break-all rounded bg-background px-2 py-1 text-xs font-mono select-all">{form.webhookSecret}</code>
+          </div>
+        {/if}
+      </CardContent>
+    </Card>
   </TabsContent>
 </Tabs>
 

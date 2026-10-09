@@ -16,6 +16,9 @@ import type { Invitation as InvitationRow } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AccessService, CurrentUser } from '../access/access.service';
 import { AuthService, SessionTokens } from '../auth/auth.service';
+import { ConfigService } from '@nestjs/config';
+import { MailerService } from '../notifications/mailer.service';
+import { publicUrl } from '../common/public-url';
 import { projectRole } from '../projects/projects.service';
 import { userRole } from './users.service';
 
@@ -35,6 +38,8 @@ export class InvitationsService {
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly auth: AuthService,
+    private readonly mailer: MailerService,
+    private readonly config: ConfigService,
   ) {}
 
   async create(admin: CurrentUser, dto: CreateInvitationDto): Promise<CreatedInvitation> {
@@ -67,7 +72,20 @@ export class InvitationsService {
       },
       include: { project: { select: { slug: true } } },
     });
-    return { ...toDto(row), invitePath: `/invite/${token}` };
+    const invitePath = `/invite/${token}`;
+    const base = publicUrl(this.config, dto.baseUrl);
+    const emailSent = base
+      ? await this.mailer.send({
+          to: email,
+          subject: 'You are invited to optik',
+          text: [
+            `${admin.email} invited you to optik${row.project ? ` (project ${row.project.slug})` : ''}.`,
+            `Choose a password to get started: ${base}${invitePath}`,
+            `The link is valid for ${VALID_DAYS} days.`,
+          ].join('\n\n'),
+        })
+      : false;
+    return { ...toDto(row), invitePath, emailSent };
   }
 
   /** Invitations that are neither accepted nor expired. */

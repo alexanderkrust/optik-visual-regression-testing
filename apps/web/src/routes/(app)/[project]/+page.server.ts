@@ -1,7 +1,7 @@
 import { serverApi } from '$lib/server/api';
 import { error, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import type { ProjectRole } from '@optik/shared';
+import type { NotificationChannelType, NotificationEvent, ProjectRole } from '@optik/shared';
 
 export const load: PageServerLoad = async (event) => {
   const api = serverApi(event.locals);
@@ -12,10 +12,14 @@ export const load: PageServerLoad = async (event) => {
     ]);
     // Tokens and members are for maintainers (and admins) only
     const manages = project.myRole === 'maintainer' || project.myRole === 'admin';
-    const [tokens, members] = manages
-      ? await Promise.all([api.tokens.list(event.params.project), api.members.list(event.params.project)])
-      : [[], []];
-    return { project, runs, tokens, members, manages, projectSlug: event.params.project };
+    const [tokens, members, channels] = manages
+      ? await Promise.all([
+          api.tokens.list(event.params.project),
+          api.members.list(event.params.project),
+          api.notifications.list(event.params.project),
+        ])
+      : [[], [], []];
+    return { project, runs, tokens, members, channels, manages, projectSlug: event.params.project };
   } catch (e) {
     if (e instanceof Error && e.message.startsWith('404')) error(404, 'Project not found');
     console.error(`[load] Failed to fetch project data for ${event.params.project}:`, e);
@@ -84,6 +88,33 @@ export const actions: Actions = {
       const msg = e instanceof Error ? e.message.replace(/^\d{3} [^:]*:?\s*/, '') : String(e);
       return fail(400, { memberError: msg });
     }
+  },
+
+  addChannel: async (event) => {
+    const data = await event.request.formData();
+    try {
+      const channel = await serverApi(event.locals).notifications.create(event.params.project, {
+        type: data.get('type') as NotificationChannelType,
+        target: String(data.get('target') ?? ''),
+        events: data.getAll('events') as NotificationEvent[],
+      });
+      return { channelAdded: true, webhookSecret: channel.webhookSecret ?? null };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.replace(/^\d{3} [^:]*:?\s*/, '') : String(e);
+      return fail(400, { channelError: msg });
+    }
+  },
+
+  removeChannel: async (event) => {
+    const data = await event.request.formData();
+    await serverApi(event.locals).notifications.remove(event.params.project, String(data.get('id')));
+  },
+
+  testChannel: async (event) => {
+    const data = await event.request.formData();
+    const id = String(data.get('id'));
+    const { delivered } = await serverApi(event.locals).notifications.test(event.params.project, id);
+    return { testedChannel: id, delivered };
   },
 
   removeMember: async (event) => {
