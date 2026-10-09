@@ -36,11 +36,15 @@ export interface CreateInvitationDto {
   /** Optionally add the new user to a project right away */
   projectSlug?: string;
   projectRole?: ProjectRole;
+  /** optik URL for the link in the invitation e-mail (PUBLIC_URL on the server wins) */
+  baseUrl?: string;
 }
 
 export interface CreatedInvitation extends Invitation {
   /** Path of the invitation link (relative to the optik URL) — shown only once */
   invitePath: string;
+  /** Whether the link was sent by e-mail (needs SMTP on the server) */
+  emailSent: boolean;
 }
 
 export interface Project {
@@ -186,4 +190,51 @@ export interface CreatedApiTokenDto extends ApiToken {
 
 export interface UpdateSnapshotStatusDto {
   status: 'approved' | 'rejected';
+}
+
+// ------------------------------------------------------------- notifications
+
+export type NotificationChannelType = 'slack' | 'teams' | 'webhook' | 'email';
+
+/**
+ * - `run.needs_review`: a run finished with visual changes to review
+ * - `run.reviewed`: the last open change of a run was accepted or rejected
+ */
+export type NotificationEvent = 'run.needs_review' | 'run.reviewed';
+
+export interface NotificationChannel {
+  id: string;
+  type: NotificationChannelType;
+  /** Non-secret description of the target, e.g. "hooks.slack.com/…/Xb3" */
+  label: string;
+  events: NotificationEvent[];
+  createdAt: string;
+}
+
+export interface CreateNotificationChannelDto {
+  type: NotificationChannelType;
+  /** Webhook URL (slack, teams, webhook) or comma-separated e-mail addresses */
+  target: string;
+  /** Defaults to all events */
+  events?: NotificationEvent[];
+}
+
+export interface CreatedNotificationChannel extends NotificationChannel {
+  /** Generic webhooks: secret for verifying the X-Optik-Signature header — shown only once */
+  webhookSecret?: string;
+}
+
+/** Body of a generic webhook */
+export interface WebhookPayload {
+  event: NotificationEvent;
+  project: { slug: string; name: string };
+  run: {
+    id: string;
+    branch: string;
+    suite: string;
+    commitSha: string;
+    pendingCount: number;
+    changedCount: number;
+  };
+  reviewUrl: string | null;
 }
