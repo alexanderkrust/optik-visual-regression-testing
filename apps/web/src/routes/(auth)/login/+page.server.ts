@@ -25,6 +25,14 @@ export const actions: Actions = {
         if (res.status === 401) {
           return fail(401, { error: 'Invalid email or password', email });
         }
+        if (res.status === 429) {
+          const { retryAfter } = (await res.json().catch(() => ({}))) as { retryAfter?: number };
+          const minutes = Math.max(1, Math.ceil((retryAfter ?? 60) / 60));
+          return fail(429, {
+            error: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+            email,
+          });
+        }
         return fail(res.status, { error: 'Login failed. Please try again.', email });
       }
 

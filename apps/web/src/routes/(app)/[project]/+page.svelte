@@ -416,6 +416,7 @@
                 <TableCell class="font-medium">
                   <span class="flex items-center gap-2">
                     {token.name}
+                    <span class="font-mono text-xs text-muted-foreground">{token.prefix}…</span>
                     {#if expired}
                       <Badge variant="destructive" class="text-xs">expired</Badge>
                     {/if}

@@ -76,5 +76,18 @@ export const handle: Handle = async ({ event, resolve }) => {
     redirect(302, '/setup');
   }
 
-  return resolve(event);
+  const response = await resolve(event);
+  setSecurityHeaders(response.headers, event.url);
+  return response;
 };
+
+/** Security headers for pages; the Content-Security-Policy comes from svelte.config.js. */
+function setSecurityHeaders(headers: Headers, url: URL) {
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (url.protocol === 'https:') {
+    headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+}
