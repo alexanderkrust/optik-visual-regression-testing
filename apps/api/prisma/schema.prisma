@@ -44,6 +44,9 @@ model Run {
   project   Project    @relation(fields: [projectId], references: [id])
   projectId String     @map("project_id")
   branch    String
+  /// Test suite that produced the run (e.g. "vitest", "playwright"). Runs are
+  /// merged and baselines are kept per suite. "default" for runs before suites.
+  suite     String     @default("default")
   commitSha String     @map("commit_sha")
   status    RunStatus  @default(running)
   createdAt DateTime   @default(now()) @map("created_at")
@@ -54,7 +57,7 @@ model Run {
   lastCommitSha String?    @map("last_commit_sha")
   snapshots     Snapshot[]
 
-  @@index([projectId, branch, createdAt])
+  @@index([projectId, suite, branch, createdAt])
   @@map("runs")
 }
 

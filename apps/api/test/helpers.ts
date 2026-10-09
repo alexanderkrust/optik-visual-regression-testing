@@ -128,8 +128,8 @@ export class AdapterClient {
     private readonly token: string,
   ) {}
 
-  startRun(branch = 'main', commitSha = 'abc1234') {
-    return call(`${this.api}/runs`, { token: this.token, json: { branch, commitSha } });
+  startRun(branch = 'main', commitSha = 'abc1234', suite?: string) {
+    return call(`${this.api}/runs`, { token: this.token, json: { branch, commitSha, suite } });
   }
 
   submit(runId: string, name: string, image: Buffer) {
@@ -145,8 +145,13 @@ export class AdapterClient {
   }
 
   /** A whole run: start, submit the given snapshots, complete. */
-  async fullRun(snapshots: Record<string, Buffer>, branch = 'main', commitSha = 'abc1234') {
-    const run = (await this.startRun(branch, commitSha)).body;
+  async fullRun(
+    snapshots: Record<string, Buffer>,
+    branch = 'main',
+    commitSha = 'abc1234',
+    suite?: string,
+  ) {
+    const run = (await this.startRun(branch, commitSha, suite)).body;
     const results: Record<string, any> = {};
     for (const [name, image] of Object.entries(snapshots)) {
       results[name] = (await this.submit(run.id, name, image)).body;

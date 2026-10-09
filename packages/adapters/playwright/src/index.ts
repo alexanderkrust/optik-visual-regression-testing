@@ -13,6 +13,11 @@ export interface OptikConfig {
   token: string
   /** Override the Optik server URL. Defaults to OPTIK_SERVER_URL env var or http://localhost:3000 */
   serverUrl?: string
+  /**
+   * Name of this test suite. Runs are merged and baselines are kept per suite,
+   * so give each Playwright config of a project its own name. Defaults to "playwright".
+   */
+  suite?: string
 }
 
 /**
@@ -27,6 +32,7 @@ export function optikConfig(config: OptikConfig) {
   // Set in env so global-setup.ts and worker fixtures can read the values.
   // Workers inherit env vars from the main process, which is why this works.
   process.env._OPTIK_TOKEN = config.token
+  process.env._OPTIK_SUITE = config.suite ?? "playwright"
   if (config.serverUrl) {
     process.env._OPTIK_SERVER_URL = config.serverUrl
   }
