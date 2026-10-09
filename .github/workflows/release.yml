@@ -3,8 +3,9 @@ name: Release
 # optik has one product version (all @optik/* packages, see .changeset/).
 #  1. Changesets keeps a "Version Packages" pull request up to date.
 #  2. Merging it bumps the version on main. This workflow then publishes the
-#     release: signed multi-arch image with SBOM, Helm chart, git tag and
-#     GitHub release. Versions that already have a tag are skipped.
+#     release: signed multi-arch image with SBOM, Helm chart, air-gapped
+#     installation bundles, git tag and GitHub release. Versions that already
+#     have a tag are skipped.
 
 on:
   push:
@@ -140,6 +141,19 @@ jobs:
           digest=$(helm push "optik-$VERSION.tgz" "oci://$CHART_REPO" 2>&1 | tee /dev/stderr | awk '/^Digest:/ {print $2}')
           cosign sign --yes "$CHART_REPO/optik@$digest"
 
+      # ── Air-gapped bundles ─────────────────────────────────────────────────
+      - uses: imjasonh/setup-crane@v0.4
+      - name: Build and sign air-gapped bundles
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | crane auth login ghcr.io -u "${{ github.actor }}" --password-stdin
+          mkdir -p bundles
+          for arch in amd64 arm64; do
+            bundle=$(scripts/airgap-bundle.sh "$VERSION" "$arch" \
+              "$IMAGE@${{ steps.image.outputs.digest }}" "optik-$VERSION.tgz" bundles)
+            cosign sign-blob --yes --bundle "$bundle.sigstore.json" "$bundle"
+          done
+          ls -lh bundles
+
       # ── Tag and GitHub release (last, so a failed run can simply be retried) ─
       - name: Create GitHub release
         env:
@@ -155,10 +169,12 @@ jobs:
           helm install optik oci://$CHART_REPO/optik --version $VERSION
           \`\`\`
 
+          Without internet access: download \`optik-$VERSION-airgap-<arch>.tar.gz\` below and follow the \`INSTALL.md\` inside.
+
           Image digest: \`${{ steps.image.outputs.digest }}\` — signed with cosign (keyless), SBOM attached. See [Verifying releases](${{ github.server_url }}/${{ github.repository }}#verifying-releases).
           NOTES
           gh release create "v$VERSION" \
             --target "$GITHUB_SHA" \
             --title "optik $VERSION" \
             --notes-file notes.md \
-            "optik-$VERSION.spdx.json" "optik-$VERSION.tgz"
+            "optik-$VERSION.spdx.json" "optik-$VERSION.tgz" bundles/*

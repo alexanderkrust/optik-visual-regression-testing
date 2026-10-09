@@ -1,0 +1,37 @@
+# optik __VERSION__ — air-gapped installation. Images come from images.tar
+# (`docker load -i images.tar`), nothing is pulled from the internet.
+
+services:
+  optik:
+    image: ghcr.io/alexanderkrust/optik:__VERSION__
+    pull_policy: never
+    ports:
+      - '${OPTIK_PORT:-3000}:3000'
+    environment:
+      DATABASE_URL: postgresql://optik:${POSTGRES_PASSWORD:-optik}@postgres:5432/optik
+    volumes:
+      - optik-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:__POSTGRES_TAG__
+    pull_policy: never
+    environment:
+      POSTGRES_DB: optik
+      POSTGRES_USER: optik
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-optik}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U optik -d optik']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  optik-data:
+  postgres-data:

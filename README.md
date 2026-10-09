@@ -67,6 +67,19 @@ helm install optik oci://ghcr.io/alexanderkrust/charts/optik --version <version>
 
 All options are documented in [charts/optik/values.yaml](charts/optik/values.yaml). With S3 storage, optik can run several replicas.
 
+### Without internet access
+
+Every release has an air-gapped bundle per architecture (`optik-<version>-airgap-amd64.tar.gz`, `…-arm64.tar.gz`) with the optik and PostgreSQL images, a ready-to-use `docker-compose.yml`, the Helm chart and an `INSTALL.md`:
+
+```bash
+tar -xzf optik-<version>-airgap-amd64.tar.gz && cd optik-<version>-airgap-amd64
+sha256sum -c SHA256SUMS
+docker load -i images.tar
+docker compose up -d
+```
+
+For Kubernetes, `INSTALL.md` explains how to copy the images into an internal registry and install the chart from the bundle.
+
 ### Verifying releases
 
 Every release image and Helm chart is signed with [cosign](https://github.com/sigstore/cosign) (keyless, via GitHub Actions OIDC) and comes with an SPDX SBOM — as a registry attestation and as a release asset.
@@ -83,7 +96,7 @@ cosign verify-attestation ghcr.io/alexanderkrust/optik:<version> --type spdxjson
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-The chart is verified the same way: `cosign verify ghcr.io/alexanderkrust/charts/optik:<version> …`.
+The chart is verified the same way: `cosign verify ghcr.io/alexanderkrust/charts/optik:<version> …`. Air-gapped bundles are signed as files — verify them with `cosign verify-blob` and the `.sigstore.json` from the release (see `INSTALL.md` in the bundle).
 
 For working on optik itself see [DEVELOPMENT.md](DEVELOPMENT.md); for what's planned see [ROADMAP.md](ROADMAP.md).
 
