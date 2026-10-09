@@ -203,6 +203,17 @@ const valid = received.length === expected.length && crypto.timingSafeEqual(rece
 
 Links point to `PUBLIC_URL`, or else to the URL the adapters used (`OPTIK_SERVER_URL`).
 
+### Audit log (Enterprise)
+
+Admins find under *Audit log* who did what, when and from where — sign-ins and failed attempts, accepted and rejected changes, ignore regions and thresholds, comments, users, roles and invitations, project settings, API tokens, notification channels and the license. Each event has the person (or API token), the project, the affected object, details such as old and new value, the IP address and the browser. Secrets — tokens, passwords, webhook URLs — are never recorded.
+
+- **Search and filter** by text, event type, project and time; maintainers see the events of their projects via the API (`?project=`).
+- **Export** as CSV or JSON Lines (all events matching the filter). Values a spreadsheet would run as a formula are defused.
+- **Append-only:** the database refuses changes and deletions of events, and every event's SHA-256 hash covers the previous one. *Verify integrity* recomputes the chain and shows the first event that was changed in the database.
+- optik never deletes audit events. Behind a reverse proxy, make sure it sets `X-Forwarded-For`, so the client's address is recorded.
+
+Events are recorded while the Enterprise edition is in effect.
+
 ### Test suites
 
 Each run belongs to a suite: `vitest` and `playwright` by default, configurable with the adapters' `suite` option. Baselines and run merging are per suite, so a project can have component and page tests with equal snapshot names, or several Playwright configs, without them interfering. Give every test config of a project its own suite name.
@@ -375,6 +386,14 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/auth/refresh` | Exchange refresh token for a new access token |
 | POST | `/api/auth/logout` | Revoke refresh token |
 
+### Audit log (Enterprise; admins, or maintainers with `?project=`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/audit-events` | Events, newest first. Filters: `q`, `action` (e.g. `snapshot.approved` or the prefix `snapshot.`), `project`, `from`, `to`; paging with `limit` and `before` (= `nextCursor`) |
+| GET | `/api/audit-events/export` | Same filters, `format=csv` or `jsonl` |
+| GET | `/api/audit-events/verify` | Recompute the hash chain (admins) |
+
 ### License (admin)
 
 | Method | Path | Description |
@@ -470,13 +489,13 @@ Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL o
 
 ## Editions and license
 
-optik is open source under the [Apache License 2.0](LICENSE). Without a license key it runs as **Community** edition: all core features, up to 5 reviewers.
+optik is open source under the [Apache License 2.0](LICENSE). Enterprise features live in directories named `ee` and are licensed under the [optik Enterprise License](ee/LICENSE): free to try and develop with, a license key is needed for production use. Without a license key it runs as **Community** edition: all core features, up to 5 reviewers.
 
 | Edition | Reviewers | Adds |
 |---|---|---|
 | Community | 5 | — |
 | Team | as licensed | — |
-| Enterprise | as licensed | SSO, audit log, teams, SCIM, retention policies (in development) |
+| Enterprise | as licensed | audit log; SSO, teams, SCIM, retention policies (in development) |
 
 *Reviewers* are the people who can accept or reject changes: admins, and maintainers and reviewers of any project. Developers who only run tests, and viewers, don't count.
 
