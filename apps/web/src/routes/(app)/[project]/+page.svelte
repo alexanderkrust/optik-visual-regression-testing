@@ -201,7 +201,7 @@
 
 <svelte:head><title>{data.projectSlug} — optik</title></svelte:head>
 
-<nav class="flex items-center gap-1.5 text-sm text-muted-foreground mb-6">
+<nav class="flex items-center gap-1.5 text-sm text-muted-foreground mb-6" aria-label="Breadcrumb">
   <a href="/" class="hover:text-foreground transition-colors">Projects</a>
   <ChevronRight class="h-4 w-4" />
   <span class="text-foreground font-medium">{data.projectSlug}</span>
@@ -464,7 +464,7 @@
               <TableHead>Name</TableHead>
               <TableHead>Expires</TableHead>
               <TableHead>Created</TableHead>
-              <TableHead class="w-16"></TableHead>
+              <TableHead class="w-16"><span class="sr-only">Actions</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -497,6 +497,7 @@
                       type="submit"
                       variant="ghost"
                       size="sm"
+                      aria-label="Revoke token {token.name}"
                       class="text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
                       <Trash2 class="h-4 w-4" />
@@ -585,7 +586,7 @@
       </Card>
     {/if}
     {#if data.teams.length > 0}
-      <h3 class="mt-6 mb-2 text-sm font-semibold">Teams with access</h3>
+      <h2 class="mt-6 mb-2 text-sm font-semibold">Teams with access</h2>
       <Card>
         <Table>
           <TableBody>
@@ -629,7 +630,7 @@
           <Separator />
 
           <div class="space-y-1">
-            <h3 class="text-sm font-semibold">Commit status</h3>
+            <h2 class="text-sm font-semibold">Commit status</h2>
             <p class="text-xs text-muted-foreground">
               Each run reports a status (<code>optik/&lt;suite&gt;</code>) to your CI system, with a
               link to the review. It turns green once all changes are accepted — no need to re-run CI.
@@ -697,7 +698,7 @@
     <Card class="mt-4">
       <CardContent class="p-6 space-y-4">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold">Notifications</h3>
+          <h2 class="text-sm font-semibold">Notifications</h2>
           <p class="text-xs text-muted-foreground">
             Tell your team when a run has visual changes to review, and when the review is done.
           </p>
@@ -773,7 +774,7 @@
       <Card class="mt-4">
         <CardContent class="p-6 space-y-4">
           <div class="space-y-1">
-            <h3 class="text-sm font-semibold">Storage and retention</h3>
+            <h2 class="text-sm font-semibold">Storage and retention</h2>
             <p class="text-xs text-muted-foreground">
               {formatBytes(storage.bytes)} in {storage.images} image{storage.images === 1 ? '' : 's'} ·
               {storage.runs} run{storage.runs === 1 ? '' : 's'} · {storage.snapshots} snapshot{storage.snapshots === 1 ? '' : 's'}

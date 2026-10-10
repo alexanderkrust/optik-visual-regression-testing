@@ -113,7 +113,7 @@
         <TableHead>Email</TableHead>
         <TableHead>Role</TableHead>
         <TableHead>Since</TableHead>
-        <TableHead class="w-40"></TableHead>
+        <TableHead class="w-40"><span class="sr-only">Actions</span></TableHead>
       </TableRow>
     </TableHeader>
     <TableBody>
@@ -130,6 +130,7 @@
               <input type="hidden" name="id" value={user.id} />
               <select
                 name="role"
+                aria-label="Instance role of {user.email}"
                 class={selectClass}
                 value={user.role}
                 onchange={(e) => e.currentTarget.form?.requestSubmit()}
