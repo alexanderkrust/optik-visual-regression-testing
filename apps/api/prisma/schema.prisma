@@ -423,3 +423,12 @@ model SamlRequest {
 
   @@map("saml_requests")
 }
+
+/// Failed sign-ins per account (ms timestamps within the lockout window),
+/// shared by all instances behind a load balancer.
+model LoginFailure {
+  email    String   @id
+  failedAt BigInt[] @map("failed_at")
+
+  @@map("login_failures")
+}
