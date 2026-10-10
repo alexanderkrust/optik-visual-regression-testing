@@ -19,7 +19,7 @@
 <div class="grid gap-4 sm:grid-cols-3 mb-8">
   <Card>
     <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle class="text-sm font-medium">Total Projects</CardTitle>
+      <CardTitle level={2} class="text-sm font-medium">Total Projects</CardTitle>
       <FolderOpen class="text-muted-foreground h-4 w-4" />
     </CardHeader>
     <CardContent>
@@ -29,7 +29,7 @@
   </Card>
   <Card>
     <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle class="text-sm font-medium">Environments</CardTitle>
+      <CardTitle level={2} class="text-sm font-medium">Environments</CardTitle>
       <Layers class="text-muted-foreground h-4 w-4" />
     </CardHeader>
     <CardContent>
@@ -39,7 +39,7 @@
   </Card>
   <Card>
     <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle class="text-sm font-medium">Last Created</CardTitle>
+      <CardTitle level={2} class="text-sm font-medium">Last Created</CardTitle>
       <CalendarDays class="text-muted-foreground h-4 w-4" />
     </CardHeader>
     <CardContent>
