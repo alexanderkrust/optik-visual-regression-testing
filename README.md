@@ -214,6 +214,24 @@ Admins find under *Audit log* who did what, when and from where — sign-ins and
 
 Events are recorded while the Enterprise edition is in effect.
 
+### Single sign-on (Enterprise)
+
+Admins add identity providers under *Single sign-on*. optik speaks OpenID Connect (authorization code flow with PKCE); each provider becomes a button on the sign-in page.
+
+1. Register optik at the provider as a web application with the **redirect URI** optik shows (`https://<optik>/api/auth/sso/<id>/callback`) and create a client secret.
+2. In optik: name, **issuer URL**, client ID and secret. *Check connection* reads the provider's discovery document.
+3. Optional: **roles from groups** — map a group to *optik admin* or to a role in a project. Roles a mapping covers follow the provider on every sign-in (the admin role if any group maps to it; the role in each project a mapping names); everything else stays managed in optik. The last admin is never demoted.
+4. Optional: restrict sign-ins to e-mail domains, turn off account creation (then only invited people can sign in), and under *Passwords* allow passwords **only for admins** — they keep them as a way in if the provider is down.
+
+| Provider | Issuer URL | Groups |
+|---|---|---|
+| Entra ID | `https://login.microsoftonline.com/<tenant-id>/v2.0` | *Token configuration → Add groups claim* (group object IDs; for large tenants assign groups to the app) |
+| Okta | `https://<org>.okta.com` or a custom authorization server | a `groups` claim in the authorization server |
+| Keycloak | `https://<host>/realms/<realm>` | client scope with a *Group Membership* mapper named `groups` |
+| Google | `https://accounts.google.com` | no groups — use allowed domains |
+
+Accounts are created on the first sign-in (role *member*) and linked to the provider's subject ID, so they survive e-mail changes; an existing account with the same e-mail address is linked. Sign-ins with an e-mail address the provider marks as unverified are refused. Behind a reverse proxy, make sure it passes `Host` / `X-Forwarded-Host` and `X-Forwarded-Proto`, or set `PUBLIC_URL` — the redirect URI is built from them.
+
 ### Test suites
 
 Each run belongs to a suite: `vitest` and `playwright` by default, configurable with the adapters' `suite` option. Baselines and run merging are per suite, so a project can have component and page tests with equal snapshot names, or several Playwright configs, without them interfering. Give every test config of a project its own suite name.
@@ -394,6 +412,19 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | GET | `/api/audit-events/export` | Same filters, `format=csv` or `jsonl` |
 | GET | `/api/audit-events/verify` | Recompute the hash chain (admins) |
 
+### Single sign-on (Enterprise)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/auth/sso/providers` | Sign-in options (public) |
+| GET | `/api/auth/sso/:id/start` | Redirects to the provider (`?returnTo=/path`) |
+| GET | `/api/auth/sso/:id/callback` | The provider's redirect target |
+| POST | `/api/auth/sso/exchange` | One-time code → session (used by the web UI's server) |
+| GET/POST | `/api/sso/providers` | List / add providers (admin) |
+| PUT/DELETE | `/api/sso/providers/:id` | Change / remove a provider (admin) |
+| POST | `/api/sso/providers/:id/check` | Read the discovery document (admin) |
+| GET/PUT | `/api/sso/settings` | `passwordLogin`: `all` or `admins` (admin) |
+
 ### License (admin)
 
 | Method | Path | Description |
@@ -495,7 +526,7 @@ optik is open source under the [Apache License 2.0](LICENSE). Enterprise feature
 |---|---|---|
 | Community | 5 | — |
 | Team | as licensed | — |
-| Enterprise | as licensed | audit log; SSO, teams, SCIM, retention policies (in development) |
+| Enterprise | as licensed | audit log, single sign-on (OIDC); teams, SAML/SCIM, retention policies (in development) |
 
 *Reviewers* are the people who can accept or reject changes: admins, and maintainers and reviewers of any project. Developers who only run tests, and viewers, don't count.
 

@@ -374,7 +374,11 @@ export type AuditAction =
   | 'notification_channel.created'
   | 'notification_channel.removed'
   | 'license.installed'
-  | 'license.removed';
+  | 'license.removed'
+  | 'sso.provider_created'
+  | 'sso.provider_updated'
+  | 'sso.provider_removed'
+  | 'sso.settings_updated';
 
 export interface AuditActor {
   /** A signed-in user, a project's API token (adapters), or nobody (e.g. a failed sign-in) */
@@ -409,4 +413,63 @@ export interface AuditVerification {
   checked: number;
   /** First event whose hash doesn't match — the log was changed from there on */
   firstInvalidSeq: number | null;
+}
+
+// ------------------------------------------------------------------ single sign-on
+
+/**
+ * Maps an identity provider group to a role. Without a project it makes
+ * members of the group instance admins; with a project slug it sets their
+ * role in that project. Roles that mappings cover follow the provider on every
+ * sign-in; everything else stays managed in optik.
+ */
+export interface SsoRoleMapping {
+  group: string;
+  project: string | null;
+  role: 'admin' | ProjectRole;
+}
+
+/** An OpenID Connect provider, as admins configure it (`/sso/providers`). */
+export interface IdentityProvider {
+  id: string;
+  name: string;
+  issuer: string;
+  clientId: string;
+  /** The secret itself is never returned */
+  clientSecretConfigured: boolean;
+  scopes: string;
+  groupsClaim: string;
+  roleMappings: SsoRoleMapping[];
+  allowedDomains: string[];
+  createUsers: boolean;
+  enabled: boolean;
+  /** Register this at the provider */
+  redirectUri: string;
+}
+
+export interface SaveIdentityProviderDto {
+  name: string;
+  issuer: string;
+  clientId: string;
+  /** Write-only. Omit to keep; changing the issuer without a new secret removes it */
+  clientSecret?: string;
+  scopes?: string;
+  groupsClaim?: string;
+  roleMappings?: SsoRoleMapping[];
+  allowedDomains?: string[];
+  createUsers?: boolean;
+  enabled?: boolean;
+}
+
+/** Who may still sign in with a password once single sign-on is set up. */
+export type PasswordLogin = 'all' | 'admins';
+
+export interface SsoSettings {
+  passwordLogin: PasswordLogin;
+}
+
+/** Shown on the sign-in page (`GET /auth/sso/providers`). */
+export interface SsoLoginOption {
+  id: string;
+  name: string;
 }

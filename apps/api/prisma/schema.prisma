@@ -138,7 +138,8 @@ enum UserRole {
 model User {
   id            String         @id @default(uuid())
   email         String         @unique
-  password      String         @map("password_hash")
+  /// Null for accounts that only sign in with single sign-on
+  password      String?        @map("password_hash")
   role          UserRole       @default(member)
   createdAt     DateTime       @default(now()) @map("created_at")
   refreshTokens RefreshToken[]
@@ -146,6 +147,8 @@ model User {
   reviews       Snapshot[]     @relation("reviewer")
   invitationsSent Invitation[] @relation("inviter")
   comments        SnapshotComment[]
+  identities      UserIdentity[]
+  ssoLoginCodes   SsoLoginCode[]
 
   @@map("users")
 }
@@ -293,4 +296,53 @@ model AuditEvent {
   @@index([projectId])
   @@index([actorId])
   @@map("audit_events")
+}
+
+/// Single sign-on with an OpenID Connect provider (src/ee/sso).
+model IdentityProvider {
+  id                    String   @id @default(uuid())
+  name                  String
+  /// Issuer URL; its /.well-known/openid-configuration describes the rest
+  issuer                String
+  clientId              String   @map("client_id")
+  clientSecretEncrypted String?  @map("client_secret_encrypted")
+  scopes                String   @default("openid email profile")
+  /// Claim with the user's groups, for role mapping
+  groupsClaim           String   @default("groups") @map("groups_claim")
+  /// [{ group, project: slug | null, role }] — see SsoRoleMapping
+  roleMappings          Json     @default("[]") @map("role_mappings")
+  /// Only these e-mail domains may sign in; empty = any
+  allowedDomains        String[] @default([]) @map("allowed_domains")
+  /// Create an account on the first sign-in (otherwise only invited users)
+  createUsers           Boolean  @default(true) @map("create_users")
+  enabled               Boolean  @default(true)
+  createdAt             DateTime @default(now()) @map("created_at")
+  identities            UserIdentity[]
+
+  @@map("identity_providers")
+}
+
+/// A user's account at an identity provider, by its stable subject ID.
+model UserIdentity {
+  id          String           @id @default(uuid())
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String           @map("user_id")
+  provider    IdentityProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  providerId  String           @map("provider_id")
+  subject     String
+  email       String
+  lastLoginAt DateTime         @default(now()) @map("last_login_at")
+
+  @@unique([providerId, subject])
+  @@map("user_identities")
+}
+
+/// One-time code that hands a finished single sign-on to the web UI (60 s).
+model SsoLoginCode {
+  codeHash  String   @id @map("code_hash")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+
+  @@map("sso_login_codes")
 }

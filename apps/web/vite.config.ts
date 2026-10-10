@@ -20,7 +20,18 @@ export default defineConfig({
 	envDir,
 	plugins: [tailwindcss(), sveltekit()],
 	server: {
-		proxy: { '/api': apiTarget }
+		proxy: {
+			'/api': {
+				target: apiTarget,
+				changeOrigin: true,
+				// The API builds links (e.g. single sign-on redirect URIs) from the browser's address
+				configure: (proxy) =>
+					proxy.on('proxyReq', (req, incoming) => {
+						if (incoming.headers.host) req.setHeader('X-Forwarded-Host', incoming.headers.host);
+						req.setHeader('X-Forwarded-Proto', 'http');
+					})
+			}
+		}
 	},
 	test: {
 		expect: { requireAssertions: true },
