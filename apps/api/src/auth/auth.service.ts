@@ -15,6 +15,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../database/prisma.service';
 import { LoginLimiter } from './login-limiter';
 import { AuditTrail } from '../audit/audit-trail';
+import { LoginPolicy } from './login-policy';
 
 // Compared against when the email is unknown, so the response time doesn't
 // reveal which accounts exist.
@@ -56,6 +57,7 @@ export class AuthService implements OnModuleInit {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly audit: AuditTrail,
+    private readonly policy: LoginPolicy,
   ) {
     this.loginLimiter = new LoginLimiter(
       Number(config.get('LOGIN_MAX_FAILURES') ?? 10),
@@ -145,6 +147,11 @@ export class AuthService implements OnModuleInit {
     }
 
     this.loginLimiter.reset(email);
+    const denied = await this.policy.passwordLoginDenied(user);
+    if (denied) {
+      await this.loginFailed(email, 'sso_required');
+      throw new ForbiddenException(denied);
+    }
     await this.audit.record({
       action: 'auth.login',
       actor: { type: 'user', id: user.id, label: user.email },
@@ -153,7 +160,7 @@ export class AuthService implements OnModuleInit {
     return this.issueTokens(user);
   }
 
-  private loginFailed(email: string, reason: 'wrong_password' | 'unknown_user' | 'blocked') {
+  private loginFailed(email: string, reason: 'wrong_password' | 'unknown_user' | 'blocked' | 'sso_required') {
     return this.audit.record({
       action: 'auth.login_failed',
       actor: { type: 'anonymous', id: null, label: email.slice(0, 254) || null },

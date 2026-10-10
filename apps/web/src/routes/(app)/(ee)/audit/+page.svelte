@@ -48,6 +48,10 @@
     'notification_channel.removed': 'Removed notification channel',
     'license.installed': 'Installed license',
     'license.removed': 'Removed license',
+    'sso.provider_created': 'Added identity provider',
+    'sso.provider_updated': 'Changed identity provider',
+    'sso.provider_removed': 'Removed identity provider',
+    'sso.settings_updated': 'Changed password sign-in',
   };
 
   const GROUPS = [
@@ -61,6 +65,7 @@
     ['project.', 'Projects'],
     ['token.', 'API tokens'],
     ['notification_channel.', 'Notifications'],
+    ['sso.', 'Single sign-on'],
     ['license.', 'License'],
   ] as const;
 

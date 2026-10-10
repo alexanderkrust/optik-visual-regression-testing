@@ -2,7 +2,16 @@ import { fail, redirect } from '@sveltejs/kit';
 import { sealSession } from '$lib/session';
 import { apiBase } from '$lib/server/api';
 import { COOKIE_NAME, cookieOptions, sessionSecret } from '$lib/server/session-cookie';
-import type { Actions } from './$types';
+import type { SsoLoginOption } from '@optik/shared';
+import type { Actions, PageServerLoad } from './$types';
+
+/** Single sign-on buttons (Enterprise) and errors from a failed sign-in. */
+export const load: PageServerLoad = async ({ url }) => {
+  const ssoProviders = await fetch(`${apiBase()}/auth/sso/providers`)
+    .then((r) => (r.ok ? (r.json() as Promise<SsoLoginOption[]>) : []))
+    .catch(() => [] as SsoLoginOption[]);
+  return { ssoProviders, ssoError: url.searchParams.get('sso_error') };
+};
 
 export const actions: Actions = {
   default: async ({ request, cookies, url, locals }) => {
@@ -24,6 +33,11 @@ export const actions: Actions = {
       if (!res.ok) {
         if (res.status === 401) {
           return fail(401, { error: 'Invalid email or password', email });
+        }
+        if (res.status === 403) {
+          // e.g. "Sign in with single sign-on — passwords are only for admins"
+          const { message } = (await res.json().catch(() => ({}))) as { message?: string };
+          return fail(403, { error: message ?? 'Password sign-in is not allowed', email });
         }
         if (res.status === 429) {
           const { retryAfter } = (await res.json().catch(() => ({}))) as { retryAfter?: number };
