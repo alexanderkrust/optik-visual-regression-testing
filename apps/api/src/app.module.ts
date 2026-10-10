@@ -15,10 +15,12 @@ import { TokensModule } from './tokens/tokens.module';
 import { AuthModule } from './auth/auth.module';
 import { LicenseModule } from './license/license.module';
 import { AuditModule } from './audit/audit.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
 import { AuditLogModule } from './ee/audit/audit-log.module';
 import { SsoModule } from './ee/sso/sso.module';
 import { TeamsModule } from './ee/teams/teams.module';
 import { ScimModule } from './ee/scim/scim.module';
+import { RetentionModule } from './ee/retention/retention.module';
 
 @Module({
   imports: [
@@ -42,11 +44,13 @@ import { ScimModule } from './ee/scim/scim.module';
     NotificationsModule,
     LicenseModule,
     AuditModule,
+    MaintenanceModule,
     // Enterprise (ee/): only active with a license that includes the feature
     AuditLogModule,
     SsoModule,
     TeamsModule,
     ScimModule,
+    RetentionModule,
   ],
   controllers: [AppController],
 })

@@ -31,6 +31,9 @@ describeS3('StorageService with S3', () => {
     expect((await storage.get('runs/r1/s1.png')).toString()).toBe('png-bytes');
     await expect(storage.get('runs/r1/missing.png')).rejects.toBeInstanceOf(NotFoundException);
 
+    expect(await storage.size('runs/r1/s1.png')).toBe(9);
+    expect(await storage.size('runs/r1/missing.png')).toBeNull();
+
     await storage.delete(['runs/r1/s1.png', 'runs/r1/missing.png']);
     await expect(storage.get('runs/r1/s1.png')).rejects.toBeInstanceOf(NotFoundException);
   });
