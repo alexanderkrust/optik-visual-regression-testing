@@ -26,7 +26,8 @@
 <div class="mb-6">
   <h1 class="text-2xl font-bold tracking-tight">Single sign-on</h1>
   <p class="text-muted-foreground text-sm mt-1">
-    Sign in with your company's identity provider over OpenID Connect — Entra ID, Okta, Keycloak, Google and others.
+    Sign in with your company's identity provider over OpenID Connect or SAML 2.0 — Entra ID, Okta, Keycloak, ADFS,
+    Google and others.
   </p>
 </div>
 
@@ -60,7 +61,9 @@
                 {provider.name}
                 {#if !provider.enabled}<Badge variant="outline">hidden</Badge>{/if}
               </p>
-              <p class="text-sm text-muted-foreground font-mono truncate">{provider.issuer}</p>
+              <p class="text-sm text-muted-foreground font-mono truncate">
+                <span class="font-sans text-xs uppercase">{provider.protocol === 'saml' ? 'SAML' : 'OIDC'}</span> · {provider.issuer}
+              </p>
               <p class="text-xs text-muted-foreground mt-1">
                 {provider.roleMappings.length} role mapping{provider.roleMappings.length === 1 ? '' : 's'}
                 {#if provider.allowedDomains.length}· only {provider.allowedDomains.join(', ')}{/if}
@@ -93,14 +96,24 @@
           {#if check && check.id === provider.id}
             <p class="text-sm {check.ok ? 'text-green-700' : 'text-destructive'}">{check.message}</p>
           {/if}
-          <div class="rounded-md bg-muted/50 p-3 text-xs space-y-1">
-            <p class="text-muted-foreground">Redirect URI — register it at the provider:</p>
-            <div class="flex items-center gap-2">
-              <code class="flex-1 truncate font-mono select-all">{provider.redirectUri}</code>
-              <Button variant="ghost" size="sm" onclick={() => navigator.clipboard.writeText(provider.redirectUri)} aria-label="Copy redirect URI">
-                <Copy class="h-3.5 w-3.5" />
-              </Button>
-            </div>
+          <div class="rounded-md bg-muted/50 p-3 text-xs space-y-2">
+            {#each provider.protocol === 'saml'
+              ? [
+                  ['Entity ID (identifier)', provider.spEntityId],
+                  ['Reply URL (assertion consumer service, HTTP-POST)', provider.redirectUri],
+                  ['Metadata — import it at the provider instead', provider.metadataUrl],
+                ]
+              : [['Redirect URI — register it at the provider:', provider.redirectUri]] as [label, value] (label)}
+              <div>
+                <p class="text-muted-foreground">{label}</p>
+                <div class="flex items-center gap-2">
+                  <code class="flex-1 truncate font-mono select-all">{value}</code>
+                  <Button variant="ghost" size="sm" onclick={() => navigator.clipboard.writeText(value)} aria-label="Copy {label}">
+                    <Copy class="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            {/each}
           </div>
         {/if}
       </CardContent>

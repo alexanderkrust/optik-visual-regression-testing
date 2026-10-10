@@ -98,7 +98,8 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 
 - [x] License key verification and editions: Ed25519-signed keys checked offline, Community (5 reviewers) / Team / Enterprise, update period checked against the release's build date, trials; keys are issued with a separate, private license tool
 - [x] SSO: OIDC (Entra ID, Okta, Keycloak, Google) with PKCE, accounts created on first sign-in, role mapping from IdP groups, passwords for admins only
-- [ ] SSO: SAML 2.0; optional SCIM provisioning
+- [x] SSO: SAML 2.0 (signed assertions, InResponseTo checked across instances, SP metadata)
+- [ ] SCIM provisioning
 - [x] Teams (groups of users with project roles), mapped from IdP groups; team access keeps working without the license
 - [x] Immutable, searchable, exportable audit log (approvals, rejections, tokens, permissions, sign-ins): append-only table with hash chain and integrity check, CSV / JSON Lines export — first code under `ee/` (optik Enterprise License, draft pending legal review)
 - [ ] Retention policies for runs and images (baselines are always kept), storage usage per project

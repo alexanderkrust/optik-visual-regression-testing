@@ -216,16 +216,18 @@ Events are recorded while the Enterprise edition is in effect.
 
 ### Single sign-on (Enterprise)
 
-Admins add identity providers under *Single sign-on*. optik speaks OpenID Connect (authorization code flow with PKCE); each provider becomes a button on the sign-in page.
+Admins add identity providers under *Single sign-on*. optik speaks **OpenID Connect** (authorization code flow with PKCE) and **SAML 2.0** (signed assertions, HTTP-Redirect / HTTP-POST); each provider becomes a button on the sign-in page.
 
-1. Register optik at the provider as a web application with the **redirect URI** optik shows (`https://<optik>/api/auth/sso/<id>/callback`) and create a client secret.
-2. In optik: name, **issuer URL**, client ID and secret. *Check connection* reads the provider's discovery document.
+1. **OpenID Connect:** register optik at the provider as a web application with the **redirect URI** optik shows (`https://<optik>/api/auth/sso/<id>/callback`), create a client secret, and enter issuer URL, client ID and secret in optik. *Check connection* reads the provider's discovery document.
+2. **SAML:** enter the provider's entity ID, sign-in URL and signing certificate in optik, then give the provider optik's **entity ID** and **reply URL** (shown after saving) — or import optik's **metadata** (`/api/auth/sso/<id>/metadata`). Send the e-mail address and groups as attributes (names configurable; the NameID is used if there's no e-mail attribute). *Check connection* shows how long the certificate is valid.
 3. Optional: **roles from groups** — map a group to *optik admin*, to a role in a project, or to a team. Roles a mapping covers follow the provider on every sign-in (the admin role if any group maps to it; the role in each project a mapping names); everything else stays managed in optik. The last admin is never demoted.
 4. Optional: restrict sign-ins to e-mail domains, turn off account creation (then only invited people can sign in), and under *Passwords* allow passwords **only for admins** — they keep them as a way in if the provider is down.
 
-| Provider | Issuer URL | Groups |
+| Provider | Issuer | Groups |
 |---|---|---|
 | Entra ID | `https://login.microsoftonline.com/<tenant-id>/v2.0` | *Token configuration → Add groups claim* (group object IDs; for large tenants assign groups to the app) |
+| Entra ID (SAML) | entity ID `https://sts.windows.net/<tenant-id>/` | groups attribute `http://schemas.microsoft.com/ws/2008/06/identity/claims/groups`, e-mail `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress` |
+| ADFS (SAML) | entity ID `http://<adfs-host>/adfs/services/trust` | claim rules for e-mail and group attributes |
 | Okta | `https://<org>.okta.com` or a custom authorization server | a `groups` claim in the authorization server |
 | Keycloak | `https://<host>/realms/<realm>` | client scope with a *Group Membership* mapper named `groups` |
 | Google | `https://accounts.google.com` | no groups — use allowed domains |
@@ -422,7 +424,9 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 |--------|------|-------------|
 | GET | `/api/auth/sso/providers` | Sign-in options (public) |
 | GET | `/api/auth/sso/:id/start` | Redirects to the provider (`?returnTo=/path`) |
-| GET | `/api/auth/sso/:id/callback` | The provider's redirect target |
+| GET | `/api/auth/sso/:id/callback` | OIDC: the provider's redirect target |
+| POST | `/api/auth/sso/:id/callback` | SAML: assertion consumer service (HTTP-POST) |
+| GET | `/api/auth/sso/:id/metadata` | SAML service provider metadata |
 | POST | `/api/auth/sso/exchange` | One-time code → session (used by the web UI's server) |
 | GET/POST | `/api/sso/providers` | List / add providers (admin) |
 | PUT/DELETE | `/api/sso/providers/:id` | Change / remove a provider (admin) |
@@ -541,7 +545,7 @@ optik is open source under the [Apache License 2.0](LICENSE). Enterprise feature
 |---|---|---|
 | Community | 5 | — |
 | Team | as licensed | — |
-| Enterprise | as licensed | audit log, single sign-on (OIDC), teams; SAML/SCIM, retention policies (in development) |
+| Enterprise | as licensed | audit log, single sign-on (OIDC, SAML), teams; SCIM, retention policies (in development) |
 
 *Reviewers* are the people who can accept or reject changes: admins, and maintainers and reviewers of any project. Developers who only run tests, and viewers, don't count.
 
