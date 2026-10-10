@@ -1,8 +1,8 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import type { ActionData } from './$types';
+  import type { ActionData, PageData } from './$types';
 
-  let { form }: { form: ActionData } = $props();
+  let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
 <svelte:head>
@@ -15,6 +15,28 @@
       <h1 class="text-2xl font-semibold tracking-tight">Sign in to optik</h1>
       <p class="text-sm text-muted-foreground">Enter your credentials to continue</p>
     </div>
+
+    {#if data.ssoProviders.length > 0}
+      <div class="space-y-2">
+        {#each data.ssoProviders as provider (provider.id)}
+          <a
+            href="/api/auth/sso/{provider.id}/start?returnTo=/"
+            class="inline-flex h-9 w-full items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            Sign in with {provider.name}
+          </a>
+        {/each}
+      </div>
+      <div class="flex items-center gap-3 text-xs text-muted-foreground">
+        <span class="h-px flex-1 bg-border"></span>or with a password<span class="h-px flex-1 bg-border"></span>
+      </div>
+    {/if}
+
+    {#if data.ssoError}
+      <div class="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        Single sign-on failed: {data.ssoError}
+      </div>
+    {/if}
 
     {#if form?.error}
       <div class="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">

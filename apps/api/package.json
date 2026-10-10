@@ -48,6 +48,7 @@
     "@types/bcryptjs": "^3.0.0",
     "bcryptjs": "^3.0.3",
     "dotenv-cli": "^11.0.0",
+    "jose": "^5.9.6",
     "nodemailer": "^10.0.16",
     "pg": "^8.13.0",
     "piscina": "^5",
