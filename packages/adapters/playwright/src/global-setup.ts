@@ -1,34 +1,11 @@
-import { getAncestorCommits, getCurrentBranch, getCurrentCommit, getPullRequest } from "@optik/core"
-import { authFetch } from "./auth.js"
-import { apiUrl, serverUrl } from "./server.js"
+import { client } from "./client.js"
 
 export default async function globalSetup(): Promise<void> {
-  const token = process.env._OPTIK_TOKEN ?? ""
-
-  if (!token) {
+  if (!process.env._OPTIK_TOKEN) {
     throw new Error(
       "Optik: no token configured. Add optikConfig({ token: 'optik_...' }) to your playwright.config.ts.",
     )
   }
-
-  const res = await authFetch(apiUrl("/runs"), token, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      branch: getCurrentBranch(),
-      commitSha: getCurrentCommit(),
-      suite: process.env._OPTIK_SUITE,
-      // Baselines come from runs on these commits (see the "Branches" section of the README)
-      ancestors: getAncestorCommits(),
-      serverUrl: serverUrl(),
-      pullRequest: getPullRequest(),
-    }),
-  })
-
-  if (!res.ok) {
-    throw new Error(`Optik: failed to create run: ${res.status} ${res.statusText}`)
-  }
-
-  const run = (await res.json()) as { id: string }
+  const run = await client().createRun({ suite: process.env._OPTIK_SUITE })
   process.env._OPTIK_RUN_ID = run.id
 }
