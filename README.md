@@ -10,12 +10,12 @@ optik/
 │   ├── api/          # NestJS + Fastify backend
 │   └── web/          # SvelteKit + shadcn/ui frontend
 ├── packages/
-│   ├── core/         # Diff engine (pixelmatch), image utils, git helpers
+│   ├── core/         # Diff engine (pixelmatch), image utils, git helpers, API client for adapters
 │   ├── shared/       # TypeScript types & constants shared across all packages
+│   ├── cli/          # `optik upload` — screenshots from any tool
 │   └── adapters/
 │       ├── vitest/       # Vitest adapter
-│       ├── playwright/   # Playwright adapter
-│       └── cypress/      # Cypress adapter (Phase 2)
+│       └── playwright/   # Playwright adapter
 ├── turbo.json
 ├── pnpm-workspace.yaml
 └── docker-compose.yml
@@ -417,6 +417,29 @@ test('Button/primary looks correct', async ({ page, optik }) => {
 ```
 
 `optikConfig` automatically wires up `globalSetup` (creates the run) and `globalTeardown` (marks it complete) — no separate fixtures file needed.
+
+### Any other tool: the CLI
+
+Screenshots from another test runner, a script or a design tool can be uploaded as one run:
+
+```bash
+npx @optik/cli upload ./screenshots --suite e2e
+```
+
+Every PNG under the directory becomes a snapshot named after its path without `.png` (`screenshots/home/desktop.png` → `home/desktop`). The CLI detects branch, commit and git history like the adapters (and the same CI variables), prints each snapshot's result and a link to the review, and exits with
+
+- `0` — nothing to review, or changes that the project doesn't fail tests on,
+- `1` — changes to review (`--fail-on-changes` / `--no-fail-on-changes` override the project setting),
+- `2` — an error (missing token, server not reachable, …).
+
+| Option / variable | Default | |
+|---|---|---|
+| `OPTIK_TOKEN` | — | Project API token (required) |
+| `OPTIK_SERVER_URL` / `--server` | `http://localhost:3000` | optik server |
+| `--suite` | `cli` | Runs are merged and baselines are kept per suite |
+| `--concurrency` | `4` | Parallel uploads |
+
+Use the same file names in every run — a renamed file is a new snapshot.
 
 ### API tokens
 
