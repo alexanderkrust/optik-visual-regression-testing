@@ -117,7 +117,8 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [ ] **Deterministic rendering container** shipped with optik (pinned browsers and fonts), so local machines and CI produce identical screenshots
 - [ ] Multiple browsers (Chromium, Firefox, WebKit) and viewports per run
 - [ ] Only re-check affected snapshots based on the git diff and dependency graph (like TurboSnap)
-- [ ] Cypress adapter and a generic CLI (`npx optik upload …`)
+- [x] Generic CLI (`npx @optik/cli upload <dir>`): any PNG screenshots as one run, exit code for CI; adapters share one API client
+- [ ] Cypress adapter
 
 ---
 

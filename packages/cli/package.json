@@ -1,15 +1,16 @@
 {
-  "name": "@optik/core",
+  "name": "@optik/cli",
   "version": "0.0.0",
+  "description": "Upload screenshots to optik from any test runner or script",
   "license": "Apache-2.0",
+  "bin": {
+    "optik": "./dist/cli.js"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],
-  "exports": {
-    ".": "./dist/index.js"
-  },
   "scripts": {
     "dev": "tsc --watch",
     "build": "tsc",
@@ -17,14 +18,14 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "pixelmatch": "^5.3.0",
-    "pngjs": "^7.0.0",
+    "@optik/core": "workspace:*",
     "@optik/shared": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
     "@types/node": "^20.0.0",
-    "@types/pixelmatch": "^5.2.6",
-    "@types/pngjs": "^6.0.4"
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }
