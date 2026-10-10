@@ -44,10 +44,18 @@ function providerDto(data: FormData): SaveIdentityProviderDto {
       return { group: group.trim(), project: null, role: 'admin' };
     })
     .filter((m) => m.group);
+  const protocol = text('protocol') === 'saml' ? 'saml' : 'oidc';
   return {
     name: text('name'),
+    protocol,
     issuer: text('issuer'),
-    clientId: text('clientId'),
+    ...(protocol === 'oidc'
+      ? { clientId: text('clientId') }
+      : {
+          samlEntryPoint: text('samlEntryPoint'),
+          samlCertificate: text('samlCertificate'),
+          emailAttribute: text('emailAttribute') || undefined,
+        }),
     ...(text('clientSecret') ? { clientSecret: text('clientSecret') } : {}),
     scopes: text('scopes') || undefined,
     groupsClaim: text('groupsClaim') || undefined,
