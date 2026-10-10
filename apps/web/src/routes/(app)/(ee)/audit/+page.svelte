@@ -52,6 +52,12 @@
     'sso.provider_updated': 'Changed identity provider',
     'sso.provider_removed': 'Removed identity provider',
     'sso.settings_updated': 'Changed password sign-in',
+    'team.created': 'Created team',
+    'team.updated': 'Changed team',
+    'team.removed': 'Removed team',
+    'team.member_added': 'Added team member',
+    'team.member_removed': 'Removed team member',
+    'team.project_role_changed': "Changed team's project role",
   };
 
   const GROUPS = [
@@ -65,6 +71,7 @@
     ['project.', 'Projects'],
     ['token.', 'API tokens'],
     ['notification_channel.', 'Notifications'],
+    ['team.', 'Teams'],
     ['sso.', 'Single sign-on'],
     ['license.', 'License'],
   ] as const;

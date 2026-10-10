@@ -378,7 +378,13 @@ export type AuditAction =
   | 'sso.provider_created'
   | 'sso.provider_updated'
   | 'sso.provider_removed'
-  | 'sso.settings_updated';
+  | 'sso.settings_updated'
+  | 'team.created'
+  | 'team.updated'
+  | 'team.removed'
+  | 'team.member_added'
+  | 'team.member_removed'
+  | 'team.project_role_changed';
 
 export interface AuditActor {
   /** A signed-in user, a project's API token (adapters), or nobody (e.g. a failed sign-in) */
@@ -418,15 +424,17 @@ export interface AuditVerification {
 // ------------------------------------------------------------------ single sign-on
 
 /**
- * Maps an identity provider group to a role. Without a project it makes
- * members of the group instance admins; with a project slug it sets their
- * role in that project. Roles that mappings cover follow the provider on every
- * sign-in; everything else stays managed in optik.
+ * Maps an identity provider group to a role. Without project and team it
+ * makes members of the group instance admins; with a project slug it sets
+ * their role in that project; with a team name it makes them team members
+ * (role "member"). Roles and teams that mappings cover follow the provider on
+ * every sign-in; everything else stays managed in optik.
  */
 export interface SsoRoleMapping {
   group: string;
   project: string | null;
-  role: 'admin' | ProjectRole;
+  team?: string | null;
+  role: 'admin' | 'member' | ProjectRole;
 }
 
 /** An OpenID Connect provider, as admins configure it (`/sso/providers`). */
@@ -472,4 +480,28 @@ export interface SsoSettings {
 export interface SsoLoginOption {
   id: string;
   name: string;
+}
+
+// ------------------------------------------------------------------ teams
+
+/** A group of users with roles in projects (Enterprise, `/teams`). */
+export interface Team {
+  id: string;
+  name: string;
+  description: string | null;
+  members: { userId: string; email: string }[];
+  projects: { projectId: string; slug: string; name: string; role: ProjectRole }[];
+}
+
+export interface SaveTeamDto {
+  name: string;
+  description?: string | null;
+}
+
+/** `GET /projects/:slug/teams` — teams with access to a project. */
+export interface ProjectTeam {
+  teamId: string;
+  name: string;
+  role: ProjectRole;
+  members: number;
 }

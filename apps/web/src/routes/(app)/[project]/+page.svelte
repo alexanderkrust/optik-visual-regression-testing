@@ -583,6 +583,26 @@
         </Table>
       </Card>
     {/if}
+    {#if data.teams.length > 0}
+      <h3 class="mt-6 mb-2 text-sm font-semibold">Teams with access</h3>
+      <Card>
+        <Table>
+          <TableBody>
+            {#each data.teams as team (team.teamId)}
+              <TableRow>
+                <TableCell class="font-medium">{team.name}</TableCell>
+                <TableCell class="text-sm text-muted-foreground">{team.members} member{team.members === 1 ? '' : 's'}</TableCell>
+                <TableCell class="text-sm capitalize">{team.role}</TableCell>
+              </TableRow>
+            {/each}
+          </TableBody>
+        </Table>
+      </Card>
+      <p class="mt-2 text-xs text-muted-foreground">
+        Members of these teams have at least the team's role in this project.
+        {#if data.user.role === 'admin'}<a href="/teams" class="underline">Manage teams</a>{/if}
+      </p>
+    {/if}
   </TabsContent>
 
   <!-- Settings tab -->

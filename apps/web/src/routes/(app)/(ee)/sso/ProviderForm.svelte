@@ -6,7 +6,7 @@
   import { untrack } from 'svelte';
   import { enhance } from '$app/forms';
   import { Plus, X } from 'lucide-svelte';
-  import type { IdentityProvider, Project, SsoRoleMapping } from '@optik/shared';
+  import type { IdentityProvider, Project, SsoRoleMapping, Team } from '@optik/shared';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
@@ -14,11 +14,13 @@
   let {
     provider = null,
     projects,
+    teams = [],
     error = null,
     oncancel,
   }: {
     provider?: IdentityProvider | null;
     projects: Project[];
+    teams?: Team[];
     error?: string | null;
     oncancel?: () => void;
   } = $props();
@@ -26,7 +28,12 @@
   // The form edits a copy of the provider as it was when the form opened
   const initial = untrack(() => provider);
   const prefix = initial?.id ?? 'new';
-  let mappings = $state<SsoRoleMapping[]>(initial?.roleMappings.map((m) => ({ ...m })) ?? []);
+  /** A mapping's target as one select value: "" (optik admin), "project:<slug>" or "team:<name>" */
+  type Row = { group: string; target: string; role: SsoRoleMapping['role'] };
+  const targetOf = (m: SsoRoleMapping) => (m.team ? `team:${m.team}` : m.project ? `project:${m.project}` : '');
+  let mappings = $state<Row[]>(
+    initial?.roleMappings.map((m) => ({ group: m.group, target: targetOf(m), role: m.role })) ?? [],
+  );
   const selectClass =
     'h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
 </script>
@@ -87,18 +94,25 @@
       <div class="flex flex-wrap items-center gap-2">
         <Input name="mappingGroup" bind:value={mapping.group} placeholder="Group name or ID" class="h-9 w-64 font-mono" aria-label="Group" />
         <span class="text-sm text-muted-foreground">→</span>
-        <select name="mappingProject" class={selectClass} bind:value={mapping.project} aria-label="Where">
-          <option value={null}>optik admin</option>
-          {#each projects as project (project.id)}<option value={project.slug}>{project.name}</option>{/each}
+        <select name="mappingTarget" class={selectClass} bind:value={mapping.target} aria-label="Where">
+          <option value="">optik admin</option>
+          <optgroup label="Projects">
+            {#each projects as project (project.id)}<option value="project:{project.slug}">{project.name}</option>{/each}
+          </optgroup>
+          {#if teams.length > 0}
+            <optgroup label="Teams">
+              {#each teams as team (team.id)}<option value="team:{team.name}">Team {team.name}</option>{/each}
+            </optgroup>
+          {/if}
         </select>
-        {#if mapping.project}
+        {#if mapping.target.startsWith('project:')}
           <select name="mappingRole" class={selectClass} bind:value={mapping.role} aria-label="Project role">
             <option value="viewer">Viewer</option>
             <option value="reviewer">Reviewer</option>
             <option value="maintainer">Maintainer</option>
           </select>
         {:else}
-          <input type="hidden" name="mappingRole" value="admin" />
+          <input type="hidden" name="mappingRole" value={mapping.target ? 'member' : 'admin'} />
         {/if}
         <Button variant="ghost" size="sm" onclick={() => (mappings = mappings.filter((_, j) => j !== i))} aria-label="Remove mapping">
           <X class="h-4 w-4" />
@@ -108,7 +122,8 @@
     <Button
       variant="outline"
       size="sm"
-      onclick={() => (mappings = [...mappings, { group: '', project: projects[0]?.slug ?? null, role: 'reviewer' }])}
+      onclick={() =>
+        (mappings = [...mappings, { group: '', target: projects[0] ? `project:${projects[0].slug}` : '', role: 'reviewer' }])}
     >
       <Plus class="h-4 w-4" /> Add mapping
     </Button>
