@@ -1,3 +1,4 @@
+import { messages } from '$lib/i18n';
 import { serverApi } from '$lib/server/api';
 import { error, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
@@ -24,9 +25,9 @@ export const load: PageServerLoad = async (event) => {
       : [[], [], [], [], null];
     return { project, runs, tokens, members, channels, teams, storage, manages, projectSlug: event.params.project };
   } catch (e) {
-    if (e instanceof Error && e.message.startsWith('404')) error(404, 'Project not found');
+    if (e instanceof Error && e.message.startsWith('404')) error(404, messages(event.locals.locale).project.notFound);
     console.error(`[load] Failed to fetch project data for ${event.params.project}:`, e);
-    throw error(503, 'API unavailable — make sure the API server is running');
+    throw error(503, messages(event.locals.locale).review.apiUnavailable);
   }
 };
 
@@ -57,7 +58,7 @@ export const actions: Actions = {
     const expiresAtRaw = (data.get('expiresAt') as string | null)?.trim() ?? '';
     const expiresAt = expiresAtRaw || null;
 
-    if (!name) return fail(400, { tokenError: 'Token name is required' });
+    if (!name) return fail(400, { tokenError: messages(event.locals.locale).project.tokenNameRequired });
 
     try {
       const created = await api.tokens.create(event.params.project, { name, expiresAt });
@@ -65,8 +66,8 @@ export const actions: Actions = {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('503') || msg.toLowerCase().includes('fetch'))
-        return fail(502, { tokenError: 'Could not reach the API. Make sure the server is running.' });
-      return fail(500, { tokenError: `Failed to create token: ${msg}` });
+        return fail(502, { tokenError: messages(event.locals.locale).auth.apiUnreachable });
+      return fail(500, { tokenError: messages(event.locals.locale).project.createTokenFailed(msg) });
     }
   },
 
@@ -75,7 +76,7 @@ export const actions: Actions = {
     const data = await event.request.formData();
     const field = (name: string) => ((data.get(name) as string | null) ?? '').trim();
     const defaultBranch = field('defaultBranch');
-    if (!defaultBranch) return fail(400, { settingsError: 'The default branch is required' });
+    if (!defaultBranch) return fail(400, { settingsError: messages(event.locals.locale).project.defaultBranchRequired });
 
     try {
       await api.projects.update(event.params.project, {
@@ -94,7 +95,7 @@ export const actions: Actions = {
         // "400 Bad Request: The GitLab repository must look like …"
         return fail(400, { settingsError: msg.replace(/^400[^:]*:\s*/, '') });
       }
-      return fail(500, { settingsError: `Failed to save: ${msg}` });
+      return fail(500, { settingsError: messages(event.locals.locale).project.saveFailed(msg) });
     }
   },
 
@@ -149,14 +150,14 @@ export const actions: Actions = {
     const data = await event.request.formData();
     const tokenId = data.get('tokenId') as string | null;
 
-    if (!tokenId) return fail(400, { revokeError: 'Missing token ID' });
+    if (!tokenId) return fail(400, { revokeError: messages(event.locals.locale).project.missingTokenId });
 
     try {
       await api.tokens.revoke(event.params.project, tokenId);
       return { revoked: true };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      return fail(500, { revokeError: `Failed to revoke token: ${msg}` });
+      return fail(500, { revokeError: messages(event.locals.locale).project.revokeFailed(msg) });
     }
   },
 };

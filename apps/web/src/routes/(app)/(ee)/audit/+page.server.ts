@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Alexander Rust. Part of optik Enterprise: licensed under
 // the optik Enterprise License (ee/LICENSE in the repository root), not Apache-2.0.
 import { error } from '@sveltejs/kit';
+import { messages } from '$lib/i18n';
 import { serverApi } from '$lib/server/api';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -9,7 +10,7 @@ const FILTERS = ['q', 'action', 'project', 'from', 'to', 'before'] as const;
 
 export const load: PageServerLoad = async (event) => {
   const { user } = await event.parent();
-  if (user.role !== 'admin') error(403, 'Only admins can see the audit log');
+  if (user.role !== 'admin') error(403, messages(event.locals.locale).audit.adminsOnly);
   const api = serverApi(event.locals);
 
   const query = new URLSearchParams();

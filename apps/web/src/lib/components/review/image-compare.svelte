@@ -7,6 +7,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import type { IgnoreRegion } from '@optik/shared';
+  import { useI18n } from '$lib/i18n';
 
   type Size = { w: number; h: number };
 
@@ -34,6 +35,7 @@
     onregionschange?: (regions: IgnoreRegion[]) => void;
     name: string;
   } = $props();
+  const t = useI18n().m.review.compare;
 
   let width = $state(0);
   let sizes = $state<Record<'before' | 'after' | 'diff', Size | null>>({
@@ -161,7 +163,7 @@
         <button
           type="button"
           class="pointer-events-auto absolute -right-2.5 -top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-xs leading-none text-white shadow hover:bg-sky-700"
-          aria-label="Remove ignore region {i + 1}"
+          aria-label={t.removeRegion(i + 1)}
           onclick={() => removeRegion(i)}>×</button
         >
       {/if}
@@ -201,29 +203,29 @@
   {#if mode === 'side' && before}
     <div class="flex gap-4">
       {#snippet beforePane()}
-        {@render image(before!, 'before', `${name} — baseline`)}
+        {@render image(before!, 'before', t.baseline(name))}
         {@render overlay(false)}
       {/snippet}
       {#snippet afterPane()}
-        {@render image(after, 'after', `${name} — this run`)}
+        {@render image(after, 'after', t.thisRun(name))}
         {@render overlay(false)}
       {/snippet}
-      {@render stage(beforePane, 'Before (baseline)', 0)}
-      {@render stage(afterPane, 'After (this run)', 1)}
+      {@render stage(beforePane, t.before, 0)}
+      {@render stage(afterPane, t.after, 1)}
     </div>
   {:else if mode === 'slider' && before}
     {#snippet sliderPane()}
-      {@render image(after, 'after', `${name} — this run`)}
-      {@render image(before!, 'before', `${name} — baseline`, `clip-path: inset(0 ${100 - split}% 0 0)`)}
+      {@render image(after, 'after', t.thisRun(name))}
+      {@render image(before!, 'before', t.baseline(name), `clip-path: inset(0 ${100 - split}% 0 0)`)}
       <div
         class="absolute inset-0 cursor-ew-resize touch-none"
         role="slider"
         tabindex="0"
-        aria-label="Before / after divider"
+        aria-label={t.divider}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(split)}
-        aria-valuetext="{Math.round(split)}% before"
+        aria-valuetext={t.dividerValue(Math.round(split))}
         onkeydown={(e) => {
           const step = e.shiftKey ? 20 : 5;
           if (e.key === 'ArrowLeft') split = Math.max(0, split - step);
@@ -251,25 +253,25 @@
       {@render overlay(false)}
     {/snippet}
     <div class="mb-2 flex items-center justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
-      <span>← Before</span>
-      <span>After →</span>
+      <span>← {t.beforeShort}</span>
+      <span>{t.afterShort} →</span>
     </div>
     {@render stage(sliderPane, null)}
   {:else if mode === 'onion' && before}
     {#snippet onionPane()}
-      {@render image(before!, 'before', `${name} — baseline`)}
-      {@render image(after, 'after', `${name} — this run`, `opacity: ${opacity / 100}`)}
+      {@render image(before!, 'before', t.baseline(name))}
+      {@render image(after, 'after', t.thisRun(name), `opacity: ${opacity / 100}`)}
       {@render overlay(false)}
     {/snippet}
     <label class="mb-2 flex items-center gap-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-      Before
-      <input type="range" min="0" max="100" bind:value={opacity} class="w-48 accent-primary" aria-label="Opacity of this run's image" />
-      After
+      {t.beforeShort}
+      <input type="range" min="0" max="100" bind:value={opacity} class="w-48 accent-primary" aria-label={t.opacity} />
+      {t.afterShort}
     </label>
     {@render stage(onionPane, null)}
   {:else if mode === 'diff' && diff}
     {#snippet diffPane()}
-      {@render image(diff!, 'diff', `${name} — diff`)}
+      {@render image(diff!, 'diff', t.diff(name))}
       {@render overlay(false)}
     {/snippet}
     {@render stage(diffPane, null)}
