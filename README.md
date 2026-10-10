@@ -87,6 +87,12 @@ For Kubernetes, `INSTALL.md` explains how to copy the images into an internal re
 - **Failed sign-ins are limited per account** (`LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES`), counted in memory per instance.
 - **Security headers**: Content-Security-Policy for the web UI, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS over HTTPS.
 
+### Monitoring
+
+- **Metrics:** Prometheus format at `/api/metrics` — HTTP requests by route, submitted snapshots by result, diff duration and queue, completed runs, reviews, open changes, notification and commit status deliveries, the license edition, and Node.js process metrics. Protect it with `METRICS_TOKEN`; the Helm chart can create a `ServiceMonitor` (`metrics.serviceMonitor.enabled`).
+- **Logs:** `LOG_FORMAT=json` writes one JSON object per line, including an access log. Every request gets an `X-Request-Id` (taken over from a proxy if present), which appears in the logs and the response.
+- **Tracing:** with `OTEL_EXPORTER_OTLP_ENDPOINT` set, optik sends OpenTelemetry traces of incoming requests, database queries and outgoing calls (CI systems, notifications, identity providers). Without it, nothing is loaded.
+
 ### Verifying releases
 
 Every release image and Helm chart is signed with [cosign](https://github.com/sigstore/cosign) (keyless, via GitHub Actions OIDC) and comes with an SPDX SBOM — as a registry attestation and as a release asset.
@@ -560,6 +566,11 @@ Only `DATABASE_URL` is required. Every variable also accepts a `<NAME>_FILE` var
 | `SMTP_URL` | — | SMTP server for e-mail notifications and invitations, e.g. `smtps://user:pass@mail.example.com:465` or `smtp://mail.example.com:587` |
 | `SMTP_FROM` | `optik <optik@localhost>` | Sender of e-mails |
 | `OPTIK_LICENSE` | — | License key (instead of entering it under *License*); `OPTIK_LICENSE_FILE` reads it from a file |
+| `LOG_FORMAT` | `text` (image), `json` (Helm chart) | `json`: one JSON object per line with request IDs, for log collectors |
+| `LOG_REQUESTS` | on with `json` | Access log (`true` / `false`); health checks and scrapes are left out |
+| `METRICS_ENABLED` | `true` | Prometheus metrics at `/api/metrics` |
+| `METRICS_TOKEN` | — | Require this bearer token for `/api/metrics` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Send OpenTelemetry traces (OTLP/HTTP) there; the other `OTEL_*` variables apply (`OTEL_SERVICE_NAME`, headers, …) |
 | `ORIGIN` | derived from request | Public URL, only needed if a reverse proxy doesn't send `X-Forwarded-Proto` / `X-Forwarded-Host` |
 
 Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL of your optik instance — and optionally `OPTIK_BRANCH` / `OPTIK_COMMIT` / `OPTIK_PULL_REQUEST` to override the detected branch, commit and pull request.
