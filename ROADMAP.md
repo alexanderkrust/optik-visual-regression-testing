@@ -113,7 +113,7 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 
 *Goal: teams can switch from Chromatic without missing anything.*
 
-- [ ] **Storybook integration** — every story becomes a snapshot automatically
+- [x] **Storybook integration** — every story becomes a snapshot automatically (`optik storybook`: waits for rendering and play functions, freezes animations, `optik`/`chromatic` parameters)
 - [ ] **Deterministic rendering container** shipped with optik (pinned browsers and fonts), so local machines and CI produce identical screenshots
 - [ ] Multiple browsers (Chromium, Firefox, WebKit) and viewports per run
 - [ ] Only re-check affected snapshots based on the git diff and dependency graph (like TurboSnap)
