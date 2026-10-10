@@ -98,6 +98,17 @@ spec:
               valueFrom:
                 secretKeyRef: { name: {{ . }}, key: SESSION_SECRET }
             {{- end }}
+            - name: LOG_FORMAT
+              value: {{ .Values.logFormat | quote }}
+            - name: METRICS_ENABLED
+              value: {{ .Values.metrics.enabled | quote }}
+            {{- if .Values.metrics.token }}
+            - name: METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "optik.fullname" . }}-metrics
+                  key: METRICS_TOKEN
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

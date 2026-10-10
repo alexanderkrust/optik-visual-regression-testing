@@ -11,6 +11,9 @@ import { analyse, AnalyseInput, AnalyseResult } from './analyse';
  * parallel. DIFF_WORKERS sets the pool size (default: CPU cores, at most 4);
  * 0 runs them inline on the main thread.
  */
+/** Screenshots waiting for a worker thread (for the optik_diff_queue metric). */
+export let diffQueueSize = () => 0;
+
 @Injectable()
 export class DiffService implements OnModuleDestroy {
   private readonly logger = new Logger(DiffService.name);
@@ -38,6 +41,8 @@ export class DiffService implements OnModuleDestroy {
       execArgv: compiled ? [] : ['-r', 'ts-node/register/transpile-only'],
     });
     this.logger.log(`Diffing in ${size} worker thread${size === 1 ? '' : 's'}`);
+    const pool = this.pool;
+    diffQueueSize = () => pool.queueSize;
   }
 
   async analyse(input: AnalyseInput): Promise<AnalyseResult> {

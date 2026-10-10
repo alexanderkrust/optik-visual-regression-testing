@@ -1,0 +1,37 @@
+{{- if and .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "optik.fullname" . }}
+  labels:
+    {{- include "optik.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "optik.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /api/metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      {{- if .Values.metrics.token }}
+      authorization:
+        credentials:
+          name: {{ include "optik.fullname" . }}-metrics
+          key: METRICS_TOKEN
+      {{- end }}
+{{- end }}
+{{- if .Values.metrics.token }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "optik.fullname" . }}-metrics
+  labels:
+    {{- include "optik.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  METRICS_TOKEN: {{ .Values.metrics.token | quote }}
+{{- end }}

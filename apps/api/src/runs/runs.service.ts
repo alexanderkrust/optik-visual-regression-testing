@@ -5,6 +5,7 @@ import { CommitStatusService } from '../ci/commit-status.service';
 import { AccessService, CurrentUser } from '../access/access.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService } from '../storage/storage.service';
+import { MetricsService } from '../observability/metrics.service';
 import { diffKey, imageKey } from '../snapshots/storage-keys';
 import type { Run, CreateRunDto } from '@optik/shared';
 import type { Run as PrismaRun, Snapshot as PrismaSnapshot } from '@prisma/client';
@@ -40,6 +41,7 @@ export class RunsService {
     private readonly access: AccessService,
     private readonly notifications: NotificationsService,
     private readonly storage: StorageService,
+    private readonly metrics: MetricsService,
   ) {}
 
   async findByProject(user: CurrentUser, projectSlug: string): Promise<Run[]> {
@@ -119,6 +121,7 @@ export class RunsService {
     }
 
     const target = await this.findMergeTarget(run);
+    this.metrics.runs.inc({ merged: String(!!target) });
     if (target) {
       // The merged run disappears, but its commit still needs a (green) status
       const project = await this.prisma.project.findUniqueOrThrow({ where: { id: run.projectId } });

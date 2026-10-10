@@ -18,6 +18,7 @@ import { diffKey, imageKey } from './storage-keys';
 import { DiffService } from '../diff/diff.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditTrail } from '../audit/audit-trail';
+import { MetricsService } from '../observability/metrics.service';
 import type {
   IgnoreRegion,
   Snapshot,
@@ -51,6 +52,7 @@ export class SnapshotsService {
     private readonly diff: DiffService,
     private readonly notifications: NotificationsService,
     private readonly audit: AuditTrail,
+    private readonly metrics: MetricsService,
   ) {}
 
   async findByRun(user: CurrentUser, runId: string): Promise<Snapshot[]> {
@@ -119,6 +121,7 @@ export class SnapshotsService {
 
     // Decoding, hashing and diffing run in a worker thread (see DiffService)
     let analysis: Awaited<ReturnType<DiffService['analyse']>>;
+    const timer = this.metrics.diffDuration.startTimer();
     try {
       analysis = await this.diff.analyse({
         image,
@@ -126,7 +129,10 @@ export class SnapshotsService {
         ignoreRegions: settings.ignoreRegions,
       });
     } catch {
+      this.metrics.snapshots.inc({ status: 'invalid' });
       throw new BadRequestException(`Snapshot "${name}" is not a valid PNG`);
+    } finally {
+      timer();
     }
     const { imageHash } = analysis;
 
@@ -162,6 +168,7 @@ export class SnapshotsService {
       },
     });
 
+    this.metrics.snapshots.inc({ status });
     if (status !== 'unchanged' || diffImage) await this.storage.put(imageKey(runId, snapshot.id), image);
     if (diffImage) await this.storage.put(diffKey(runId, snapshot.id), diffImage);
 
@@ -243,6 +250,7 @@ export class SnapshotsService {
     if (dto?.status !== 'approved' && dto?.status !== 'rejected') {
       throw new BadRequestException('status must be "approved" or "rejected"');
     }
+    this.metrics.reviews.inc({ decision: dto.status });
     const snapshot = await this.findById(id);
     if (!CHANGE_STATUSES.includes(snapshot.status)) {
       throw new BadRequestException(
