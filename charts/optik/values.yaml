@@ -73,6 +73,25 @@ admin:
 secrets:
   existingSecret: ""
 
+# ── Observability ────────────────────────────────────────────────────────────
+# json: one JSON object per line (Loki, Elasticsearch, …), incl. an access log
+# with request IDs. text: human-readable.
+logFormat: json
+
+metrics:
+  # Prometheus metrics at /api/metrics
+  enabled: true
+  # Optional: scrapers must send it as a bearer token
+  token: ""
+  # Prometheus Operator: create a ServiceMonitor
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+
+# Tracing: set OTEL_EXPORTER_OTLP_ENDPOINT (and other OTEL_* variables) in
+# extraEnv, e.g. http://otel-collector.monitoring:4318
+
 # Additional environment variables, e.g. JWT_ACCESS_EXPIRES
 extraEnv: []
 #  - name: JWT_ACCESS_EXPIRES
