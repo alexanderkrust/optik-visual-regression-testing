@@ -4,36 +4,55 @@
  * reach the API from the web server's address, and client IPs behind proxies
  * can be spoofed.
  *
- * In memory, i.e. per optik instance — with several replicas an attacker gets
- * the limit once per replica, which still makes guessing impractical.
+ * The failures live in a FailureStore — the database in production, so all
+ * instances behind a load balancer share one limit.
  */
 export class LoginLimiter {
-  private readonly failures = new Map<string, number[]>();
-
   constructor(
     private readonly maxFailures: number,
     private readonly windowMs: number,
+    private readonly store: FailureStore = new MemoryFailureStore(),
   ) {}
 
   /** Seconds until the next attempt is allowed, or 0 if it is allowed now. */
-  retryAfter(email: string, now = Date.now()): number {
-    const recent = this.recent(email, now);
+  async retryAfter(email: string, now = Date.now()): Promise<number> {
+    const recent = await this.store.recent(key(email), now - this.windowMs);
     if (recent.length < this.maxFailures) return 0;
-    return Math.ceil((recent[0] + this.windowMs - now) / 1000);
+    return Math.ceil((Math.min(...recent) + this.windowMs - now) / 1000);
   }
 
-  recordFailure(email: string, now = Date.now()) {
-    this.failures.set(key(email), [...this.recent(email, now), now]);
+  recordFailure(email: string, now = Date.now()): Promise<void> {
+    return this.store.add(key(email), now, now - this.windowMs);
   }
 
-  reset(email: string) {
-    this.failures.delete(key(email));
+  reset(email: string): Promise<void> {
+    return this.store.clear(key(email));
+  }
+}
+
+/** Failure timestamps (ms) per account. */
+export interface FailureStore {
+  /** Failures after `since` */
+  recent(email: string, since: number): Promise<number[]>;
+  /** Adds a failure and forgets those before `since` */
+  add(email: string, at: number, since: number): Promise<void>;
+  clear(email: string): Promise<void>;
+}
+
+/** For tests and single instances. */
+export class MemoryFailureStore implements FailureStore {
+  private readonly failures = new Map<string, number[]>();
+
+  async recent(email: string, since: number) {
+    return (this.failures.get(email) ?? []).filter((t) => t > since);
   }
 
-  private recent(email: string, now: number): number[] {
-    const recent = (this.failures.get(key(email)) ?? []).filter((t) => t > now - this.windowMs);
-    if (recent.length === 0) this.failures.delete(key(email));
-    return recent;
+  async add(email: string, at: number, since: number) {
+    this.failures.set(email, [...(await this.recent(email, since)), at]);
+  }
+
+  async clear(email: string) {
+    this.failures.delete(email);
   }
 }
 
