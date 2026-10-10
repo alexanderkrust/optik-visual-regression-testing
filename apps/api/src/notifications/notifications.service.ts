@@ -16,6 +16,7 @@ import { publicUrl } from '../common/public-url';
 import { AccessService, CurrentUser } from '../access/access.service';
 import { MailerService } from './mailer.service';
 import { AuditTrail } from '../audit/audit-trail';
+import { MetricsService } from '../observability/metrics.service';
 
 const EVENTS: NotificationEvent[] = ['run.needs_review', 'run.reviewed'];
 const TYPES: NotificationChannelType[] = ['slack', 'teams', 'webhook', 'email'];
@@ -50,6 +51,7 @@ export class NotificationsService {
     private readonly mailer: MailerService,
     private readonly config: ConfigService,
     private readonly audit: AuditTrail,
+    private readonly metrics: MetricsService,
   ) {}
 
   // ---------------------------------------------------------------- channels
@@ -184,6 +186,12 @@ export class NotificationsService {
   }
 
   private async deliver(channel: ChannelRow, message: Message): Promise<boolean> {
+    const delivered = await this.send(channel, message);
+    this.metrics.notifications.inc({ type: channel.type, result: delivered ? 'delivered' : 'failed' });
+    return delivered;
+  }
+
+  private async send(channel: ChannelRow, message: Message): Promise<boolean> {
     const target = this.secrets.decrypt(channel.targetEncrypted);
     if (!target) {
       this.logger.warn(`Notification channel ${channel.id} can't be decrypted — was JWT_SECRET changed?`);

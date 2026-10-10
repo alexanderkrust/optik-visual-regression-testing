@@ -1,3 +1,5 @@
+// First: tracing must be set up before HTTP and PostgreSQL modules load
+import './observability/tracing';
 import 'reflect-metadata';
 import { existsSync } from 'fs';
 import { join, resolve } from 'path';
@@ -11,6 +13,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { configureApp } from './app.setup';
 import { ensureSecrets, loadFileSecrets } from './bootstrap/env';
+import { JsonLogger } from './observability/json-logger';
 
 const logger = new Logger('Bootstrap');
 
@@ -19,10 +22,13 @@ async function bootstrap() {
   loadFileSecrets();
   await ensureSecrets();
 
+  // LOG_FORMAT=json: one JSON object per line, for log collectors
+  const json = process.env.LOG_FORMAT === 'json';
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     // trustProxy: honour X-Forwarded-* from a reverse proxy in front of optik
     new FastifyAdapter({ trustProxy: true }),
+    json ? { logger: new JsonLogger() } : {},
   );
 
   await configureApp(app);
