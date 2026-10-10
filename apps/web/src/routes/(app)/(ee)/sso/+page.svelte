@@ -49,6 +49,7 @@
           <ProviderForm
             {provider}
             projects={data.projects}
+            teams={data.teams}
             error={form && 'error' in form ? form.error : null}
             oncancel={() => (editing = null)}
           />
@@ -112,6 +113,7 @@
         <h2 class="font-semibold mb-4">Add an identity provider</h2>
         <ProviderForm
           projects={data.projects}
+            teams={data.teams}
           error={form && 'error' in form ? form.error : null}
           oncancel={() => (editing = null)}
         />

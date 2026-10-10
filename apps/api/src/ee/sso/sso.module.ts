@@ -4,9 +4,10 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../../auth/auth.module';
 import { SsoAdminController, SsoLoginController } from './sso.controller';
 import { SsoService } from './sso.service';
+import { TeamsModule } from '../teams/teams.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, TeamsModule],
   controllers: [SsoAdminController, SsoLoginController],
   providers: [SsoService],
 })

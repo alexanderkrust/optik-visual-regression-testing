@@ -38,6 +38,7 @@ model Project {
   invitations Invitation[]
   notificationChannels NotificationChannel[]
   snapshotSettings SnapshotSetting[]
+  teams     TeamProject[]
 
   @@map("projects")
 }
@@ -148,6 +149,7 @@ model User {
   invitationsSent Invitation[] @relation("inviter")
   comments        SnapshotComment[]
   identities      UserIdentity[]
+  teams           TeamMember[]
   ssoLoginCodes   SsoLoginCode[]
 
   @@map("users")
@@ -345,4 +347,41 @@ model SsoLoginCode {
   expiresAt DateTime @map("expires_at")
 
   @@map("sso_login_codes")
+}
+
+/// A group of users with roles in projects (Enterprise; src/ee/teams). A
+/// member's role in a project is the highest of their own and their teams'.
+model Team {
+  id          String        @id @default(uuid())
+  name        String        @unique
+  description String?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  members     TeamMember[]
+  projects    TeamProject[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String   @map("team_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([teamId, userId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+model TeamProject {
+  team      Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String      @map("team_id")
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String      @map("project_id")
+  role      ProjectRole
+
+  @@id([teamId, projectId])
+  @@index([projectId])
+  @@map("team_projects")
 }
