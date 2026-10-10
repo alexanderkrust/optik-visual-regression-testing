@@ -1,7 +1,7 @@
 {
   "name": "@optik/cli",
   "version": "0.0.0",
-  "description": "Upload screenshots to optik from any test runner or script",
+  "description": "Upload screenshots and Storybook stories to optik from any tool",
   "license": "Apache-2.0",
   "bin": {
     "optik": "./dist/cli.js"
@@ -23,9 +23,18 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "playwright": "^1.59.1"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
   }
 }
