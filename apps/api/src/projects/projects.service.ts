@@ -14,7 +14,7 @@ import type {
   ProjectRole,
   UpdateProjectDto,
 } from '@optik/shared';
-import { AccessService, CurrentUser } from '../access/access.service';
+import { AccessService, CurrentUser, effectiveRole, rolesOf } from '../access/access.service';
 import { CI_PROVIDERS, checkRepository, PROVIDERS } from '../ci/providers';
 import { AuditTrail } from '../audit/audit-trail';
 
@@ -103,10 +103,10 @@ export class ProjectsService {
   async findAll(user: CurrentUser): Promise<Project[]> {
     const rows = await this.prisma.project.findMany({
       where: this.access.visibleProjects(user),
-      include: { members: { where: { userId: user.id }, select: { role: true } } },
+      include: rolesOf(user.id),
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map((r) => toDto(r, user.role === 'admin' ? 'admin' : r.members[0].role));
+    return rows.map((r) => toDto(r, user.role === 'admin' ? 'admin' : effectiveRole(r)!));
   }
 
   async findOne(user: CurrentUser, slug: string): Promise<Project> {

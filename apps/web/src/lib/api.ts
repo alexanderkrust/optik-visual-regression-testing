@@ -3,6 +3,9 @@ import type {
   AuditEventPage,
   AuditVerification,
   IdentityProvider,
+  ProjectTeam,
+  SaveTeamDto,
+  Team,
   SaveIdentityProviderDto,
   SsoSettings,
   CreateApiTokenDto,
@@ -73,6 +76,20 @@ export function createApi(
       /** Query string as the API takes it (q, action, project, from, to, before, limit) */
       list: (query: string) => request<AuditEventPage>(`/audit-events?${query}`),
       verify: () => request<AuditVerification>('/audit-events/verify'),
+    },
+    teams: {
+      list: () => request<Team[]>('/teams'),
+      create: (dto: SaveTeamDto) => request<Team>('/teams', { method: 'POST', body: JSON.stringify(dto) }),
+      update: (id: string, dto: SaveTeamDto) =>
+        request<Team>(`/teams/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
+      remove: (id: string) => request<void>(`/teams/${id}`, { method: 'DELETE' }),
+      addMember: (id: string, email: string) =>
+        request<Team>(`/teams/${id}/members`, { method: 'POST', body: JSON.stringify({ email }) }),
+      removeMember: (id: string, userId: string) =>
+        request<Team>(`/teams/${id}/members/${userId}`, { method: 'DELETE' }),
+      setProjectRole: (id: string, slug: string, role: ProjectRole | null) =>
+        request<Team>(`/teams/${id}/projects/${slug}`, { method: 'PUT', body: JSON.stringify({ role }) }),
+      forProject: (slug: string) => request<ProjectTeam[]>(`/projects/${slug}/teams`),
     },
     sso: {
       providers: () => request<IdentityProvider[]>('/sso/providers'),
