@@ -300,15 +300,29 @@ model AuditEvent {
   @@map("audit_events")
 }
 
-/// Single sign-on with an OpenID Connect provider (src/ee/sso).
+enum IdpProtocol {
+  oidc
+  saml
+}
+
+/// Single sign-on with an OpenID Connect or SAML 2.0 provider (src/ee/sso).
 model IdentityProvider {
   id                    String   @id @default(uuid())
   name                  String
-  /// Issuer URL; its /.well-known/openid-configuration describes the rest
+  protocol              IdpProtocol @default(oidc)
+  /// OIDC: issuer URL; its /.well-known/openid-configuration describes the
+  /// rest. SAML: the provider's entity ID.
   issuer                String
-  clientId              String   @map("client_id")
+  /// OIDC only
+  clientId              String?  @map("client_id")
   clientSecretEncrypted String?  @map("client_secret_encrypted")
   scopes                String   @default("openid email profile")
+  /// SAML: where the browser signs in (HTTP-Redirect binding)
+  samlEntryPoint        String?  @map("saml_entry_point")
+  /// SAML: the provider's signing certificate (PEM)
+  samlCertificate       String?  @map("saml_certificate")
+  /// SAML: attribute with the e-mail address (else the NameID)
+  emailAttribute        String   @default("email") @map("email_attribute")
   /// Claim with the user's groups, for role mapping
   groupsClaim           String   @default("groups") @map("groups_claim")
   /// [{ group, project: slug | null, role }] — see SsoRoleMapping
@@ -384,4 +398,14 @@ model TeamProject {
   @@id([teamId, projectId])
   @@index([projectId])
   @@map("team_projects")
+}
+
+/// SAML authentication requests in flight — a response must answer one
+/// (InResponseTo). The ID doubles as RelayState, which may only be 80 bytes.
+model SamlRequest {
+  id        String   @id
+  returnTo  String   @default("/") @map("return_to")
+  expiresAt DateTime @map("expires_at")
+
+  @@map("saml_requests")
 }

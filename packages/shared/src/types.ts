@@ -437,12 +437,17 @@ export interface SsoRoleMapping {
   role: 'admin' | 'member' | ProjectRole;
 }
 
-/** An OpenID Connect provider, as admins configure it (`/sso/providers`). */
+export type IdpProtocol = 'oidc' | 'saml';
+
+/** An OpenID Connect or SAML 2.0 provider, as admins configure it (`/sso/providers`). */
 export interface IdentityProvider {
   id: string;
   name: string;
+  protocol: IdpProtocol;
+  /** OIDC: issuer URL. SAML: the provider's entity ID */
   issuer: string;
-  clientId: string;
+  /** OIDC only */
+  clientId: string | null;
   /** The secret itself is never returned */
   clientSecretConfigured: boolean;
   scopes: string;
@@ -451,14 +456,26 @@ export interface IdentityProvider {
   allowedDomains: string[];
   createUsers: boolean;
   enabled: boolean;
-  /** Register this at the provider */
+  /** SAML: the provider's sign-in URL */
+  samlEntryPoint: string | null;
+  /** SAML: the provider's signing certificate (PEM) */
+  samlCertificate: string | null;
+  /** SAML: attribute with the e-mail address (else the NameID) */
+  emailAttribute: string;
+  /** Register this at the provider (OIDC redirect URI, SAML ACS URL) */
   redirectUri: string;
+  /** SAML: optik's entity ID and metadata URL */
+  spEntityId: string;
+  metadataUrl: string;
 }
 
 export interface SaveIdentityProviderDto {
   name: string;
+  /** Default "oidc"; can't be changed later */
+  protocol?: IdpProtocol;
   issuer: string;
-  clientId: string;
+  /** OIDC */
+  clientId?: string;
   /** Write-only. Omit to keep; changing the issuer without a new secret removes it */
   clientSecret?: string;
   scopes?: string;
@@ -467,6 +484,10 @@ export interface SaveIdentityProviderDto {
   allowedDomains?: string[];
   createUsers?: boolean;
   enabled?: boolean;
+  /** SAML */
+  samlEntryPoint?: string;
+  samlCertificate?: string;
+  emailAttribute?: string;
 }
 
 /** Who may still sign in with a password once single sign-on is set up. */
