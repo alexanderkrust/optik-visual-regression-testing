@@ -35,7 +35,7 @@ export async function startApp(
 /** Removes all data — called before each test. */
 export async function resetDatabase(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE snapshots, runs, api_tokens, projects, refresh_tokens, users, instance_settings, audit_events CASCADE',
+    'TRUNCATE snapshots, runs, api_tokens, projects, refresh_tokens, users, instance_settings, audit_events, identity_providers, sso_login_codes, saml_requests, teams CASCADE',
   );
 }
 
@@ -63,14 +63,14 @@ export async function call<T = any>(
 ): Promise<Res<T>> {
   const headers: Record<string, string> = { ...init.headers };
   if (init.token) headers.Authorization = `Bearer ${init.token}`;
-  if (init.json !== undefined) headers['Content-Type'] = 'application/json';
+  if (init.json !== undefined) headers['Content-Type'] ??= 'application/json';
   const res = await fetch(url, {
     method: init.method ?? (init.json !== undefined || init.form ? 'POST' : 'GET'),
     headers,
     body: init.form ?? (init.json !== undefined ? JSON.stringify(init.json) : undefined),
   });
   const type = res.headers.get('content-type') ?? '';
-  const body = type.includes('application/json')
+  const body = /\bjson\b|\+json/.test(type)
     ? await res.json()
     : type.startsWith('image/')
       ? Buffer.from(await res.arrayBuffer())

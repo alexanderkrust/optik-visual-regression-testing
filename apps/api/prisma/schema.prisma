@@ -31,6 +31,9 @@ model Project {
   ciRepository     String?     @map("ci_repository")
   ciApiUrl         String?     @map("ci_api_url")
   ciTokenEncrypted String?     @map("ci_token_encrypted")
+  /// Retention (Enterprise): runs older than this many days are cleaned up,
+  /// baselines are always kept. Null keeps everything.
+  retentionDays    Int?        @map("retention_days")
   createdAt DateTime   @default(now()) @map("created_at")
   runs      Run[]
   tokens    ApiToken[]
@@ -38,6 +41,7 @@ model Project {
   invitations Invitation[]
   notificationChannels NotificationChannel[]
   snapshotSettings SnapshotSetting[]
+  teams     TeamProject[]
 
   @@map("projects")
 }
@@ -91,6 +95,7 @@ model Run {
   snapshots     Snapshot[]
 
   @@index([projectId, suite, branch, createdAt])
+  @@index([projectId, updatedAt])
   @@map("runs")
 }
 
@@ -114,6 +119,9 @@ model Snapshot {
   diffScore  Float?         @map("diff_score")
   /// SHA-256 of the decoded pixels — finds identical, already approved images
   imageHash  String?        @map("image_hash")
+  /// Bytes of the stored screenshot and diff image (null: none, or not measured yet)
+  imageBytes Int?           @map("image_bytes")
+  diffBytes  Int?           @map("diff_bytes")
   /// Set when the snapshot was accepted automatically because an identical
   /// image was already approved (e.g. on the branch a squash merge came from)
   autoApprovedFromId String? @map("auto_approved_from_id")
@@ -138,14 +146,23 @@ enum UserRole {
 model User {
   id            String         @id @default(uuid())
   email         String         @unique
-  password      String         @map("password_hash")
+  /// Null for accounts that only sign in with single sign-on
+  password      String?        @map("password_hash")
   role          UserRole       @default(member)
+  /// Set when the account is switched off (e.g. by SCIM): no sign-in, no API
+  /// access, not counted as a reviewer; its reviews and comments stay
+  deactivatedAt DateTime?      @map("deactivated_at")
+  /// The identity provider's ID for the account (SCIM externalId)
+  scimExternalId String?       @map("scim_external_id")
   createdAt     DateTime       @default(now()) @map("created_at")
   refreshTokens RefreshToken[]
   memberships   ProjectMember[]
   reviews       Snapshot[]     @relation("reviewer")
   invitationsSent Invitation[] @relation("inviter")
   comments        SnapshotComment[]
+  identities      UserIdentity[]
+  teams           TeamMember[]
+  ssoLoginCodes   SsoLoginCode[]
 
   @@map("users")
 }
@@ -293,4 +310,116 @@ model AuditEvent {
   @@index([projectId])
   @@index([actorId])
   @@map("audit_events")
+}
+
+enum IdpProtocol {
+  oidc
+  saml
+}
+
+/// Single sign-on with an OpenID Connect or SAML 2.0 provider (src/ee/sso).
+model IdentityProvider {
+  id                    String   @id @default(uuid())
+  name                  String
+  protocol              IdpProtocol @default(oidc)
+  /// OIDC: issuer URL; its /.well-known/openid-configuration describes the
+  /// rest. SAML: the provider's entity ID.
+  issuer                String
+  /// OIDC only
+  clientId              String?  @map("client_id")
+  clientSecretEncrypted String?  @map("client_secret_encrypted")
+  scopes                String   @default("openid email profile")
+  /// SAML: where the browser signs in (HTTP-Redirect binding)
+  samlEntryPoint        String?  @map("saml_entry_point")
+  /// SAML: the provider's signing certificate (PEM)
+  samlCertificate       String?  @map("saml_certificate")
+  /// SAML: attribute with the e-mail address (else the NameID)
+  emailAttribute        String   @default("email") @map("email_attribute")
+  /// Claim with the user's groups, for role mapping
+  groupsClaim           String   @default("groups") @map("groups_claim")
+  /// [{ group, project: slug | null, role }] — see SsoRoleMapping
+  roleMappings          Json     @default("[]") @map("role_mappings")
+  /// Only these e-mail domains may sign in; empty = any
+  allowedDomains        String[] @default([]) @map("allowed_domains")
+  /// Create an account on the first sign-in (otherwise only invited users)
+  createUsers           Boolean  @default(true) @map("create_users")
+  enabled               Boolean  @default(true)
+  createdAt             DateTime @default(now()) @map("created_at")
+  identities            UserIdentity[]
+
+  @@map("identity_providers")
+}
+
+/// A user's account at an identity provider, by its stable subject ID.
+model UserIdentity {
+  id          String           @id @default(uuid())
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String           @map("user_id")
+  provider    IdentityProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  providerId  String           @map("provider_id")
+  subject     String
+  email       String
+  lastLoginAt DateTime         @default(now()) @map("last_login_at")
+
+  @@unique([providerId, subject])
+  @@map("user_identities")
+}
+
+/// One-time code that hands a finished single sign-on to the web UI (60 s).
+model SsoLoginCode {
+  codeHash  String   @id @map("code_hash")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+
+  @@map("sso_login_codes")
+}
+
+/// A group of users with roles in projects (Enterprise; src/ee/teams). A
+/// member's role in a project is the highest of their own and their teams'.
+model Team {
+  id          String        @id @default(uuid())
+  name        String        @unique
+  description String?
+  /// The identity provider's ID for the group (SCIM externalId)
+  scimExternalId String?    @map("scim_external_id")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  members     TeamMember[]
+  projects    TeamProject[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String   @map("team_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([teamId, userId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+model TeamProject {
+  team      Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String      @map("team_id")
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String      @map("project_id")
+  role      ProjectRole
+
+  @@id([teamId, projectId])
+  @@index([projectId])
+  @@map("team_projects")
+}
+
+/// SAML authentication requests in flight — a response must answer one
+/// (InResponseTo). The ID doubles as RelayState, which may only be 80 bytes.
+model SamlRequest {
+  id        String   @id
+  returnTo  String   @default("/") @map("return_to")
+  expiresAt DateTime @map("expires_at")
+
+  @@map("saml_requests")
 }

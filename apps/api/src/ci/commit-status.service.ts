@@ -5,6 +5,7 @@ import { SecretBox } from '../common/secret-box';
 import { publicUrl } from '../common/public-url';
 import type { CiProvider } from '@prisma/client';
 import { CommitState, PROVIDERS } from './providers';
+import { MetricsService } from '../observability/metrics.service';
 
 export type { CommitState };
 
@@ -41,6 +42,7 @@ export class CommitStatusService {
     private readonly prisma: PrismaService,
     private readonly secrets: SecretBox,
     private readonly config: ConfigService,
+    private readonly metrics: MetricsService,
   ) {}
 
   /** Reports the current state of a run. */
@@ -111,12 +113,16 @@ export class CommitStatusService {
     for (const { url, init } of requests) {
       try {
         const res = await fetch(url, { ...init, signal: AbortSignal.timeout(10_000) });
-        if (res.ok) continue;
-        const body = await res.text();
+        const body = res.ok ? '' : await res.text();
         // GitLab refuses to set a status that a commit already has
-        if (ciProvider === 'gitlab' && res.status === 400 && body.includes('Cannot transition status')) continue;
+        if (res.ok || (ciProvider === 'gitlab' && res.status === 400 && body.includes('Cannot transition status'))) {
+          this.metrics.commitStatuses.inc({ provider: ciProvider, result: 'sent' });
+          continue;
+        }
+        this.metrics.commitStatuses.inc({ provider: ciProvider, result: 'failed' });
         this.logger.warn(`${where} failed: ${res.status} ${body.slice(0, 500)}`);
       } catch (err) {
+        this.metrics.commitStatuses.inc({ provider: ciProvider, result: 'failed' });
         this.logger.warn(`${where} failed: ${(err as Error).message}`);
       }
     }

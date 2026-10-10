@@ -63,7 +63,7 @@ pnpm --filter "./packages/**" build
 
 There are two ways. Pick one — both run the API on :3001 and the web UI on :5173.
 
-In development the browser calls `/api` on the Vite dev server, which forwards it to the API (`server.proxy` in `apps/web/vite.config.ts`). In production both are served by one process — see [Production image](#production-image).
+In development the browser calls `/api` on the Vite dev server, which forwards it to the API (`server.proxy` in `apps/web/vite.config.ts`, passing the browser's host as `X-Forwarded-Host` — the API builds links such as SSO redirect URIs from it). In production both are served by one process — see [Production image](#production-image).
 
 ### Option A: Docker dev stack (recommended)
 
@@ -263,6 +263,7 @@ They need a PostgreSQL database they may wipe:
 - `TEST_DATABASE_URL` in `.env` (default `postgresql://optik:optik@localhost:5432/optik_test`). The database is created and migrated automatically. Its name **must end with `_test`** — the tests refuse to run otherwise, so they can never truncate a real database.
 - Images are stored in a temporary directory; the root `.env` values for S3 and the admin account are ignored.
 - Optional: set `TEST_S3_ENDPOINT=http://localhost:8333` to also test the S3 storage against the dev stack's SeaweedFS (skipped otherwise).
+- Single sign-on tests run against a minimal OpenID provider (`test/fake-oidc.ts`) that issues real RS256-signed ID tokens; the test plays the browser.
 - License tests sign keys with a throwaway key (`test/license-keys.ts`), passed in with `startApp((b) => b.overrideProvider(LICENSE_KEYS)…)`. There is deliberately no environment variable that adds trusted keys.
 
 ```bash

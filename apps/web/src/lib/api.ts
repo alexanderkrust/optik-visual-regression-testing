@@ -2,6 +2,16 @@ import type {
   ApiToken,
   AuditEventPage,
   AuditVerification,
+  IdentityProvider,
+  ProjectTeam,
+  SaveTeamDto,
+  ScimTokenInfo,
+  ProjectStorage,
+  RetentionResult,
+  CreatedScimToken,
+  Team,
+  SaveIdentityProviderDto,
+  SsoSettings,
   CreateApiTokenDto,
   CreatedApiTokenDto,
   CreatedInvitation,
@@ -71,6 +81,41 @@ export function createApi(
       list: (query: string) => request<AuditEventPage>(`/audit-events?${query}`),
       verify: () => request<AuditVerification>('/audit-events/verify'),
     },
+    storage: {
+      overview: () => request<ProjectStorage[]>('/storage'),
+      project: (slug: string) => request<ProjectStorage>(`/projects/${slug}/storage`),
+    },
+    retention: {
+      set: (slug: string, days: number | null) =>
+        request<Project>(`/projects/${slug}/retention`, { method: 'PUT', body: JSON.stringify({ days }) }),
+      run: (slug: string) => request<RetentionResult>(`/projects/${slug}/retention/run`, { method: 'POST' }),
+    },
+    teams: {
+      list: () => request<Team[]>('/teams'),
+      create: (dto: SaveTeamDto) => request<Team>('/teams', { method: 'POST', body: JSON.stringify(dto) }),
+      update: (id: string, dto: SaveTeamDto) =>
+        request<Team>(`/teams/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
+      remove: (id: string) => request<void>(`/teams/${id}`, { method: 'DELETE' }),
+      addMember: (id: string, email: string) =>
+        request<Team>(`/teams/${id}/members`, { method: 'POST', body: JSON.stringify({ email }) }),
+      removeMember: (id: string, userId: string) =>
+        request<Team>(`/teams/${id}/members/${userId}`, { method: 'DELETE' }),
+      setProjectRole: (id: string, slug: string, role: ProjectRole | null) =>
+        request<Team>(`/teams/${id}/projects/${slug}`, { method: 'PUT', body: JSON.stringify({ role }) }),
+      forProject: (slug: string) => request<ProjectTeam[]>(`/projects/${slug}/teams`),
+    },
+    sso: {
+      providers: () => request<IdentityProvider[]>('/sso/providers'),
+      create: (dto: SaveIdentityProviderDto) =>
+        request<IdentityProvider>('/sso/providers', { method: 'POST', body: JSON.stringify(dto) }),
+      update: (id: string, dto: SaveIdentityProviderDto) =>
+        request<IdentityProvider>(`/sso/providers/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
+      remove: (id: string) => request<void>(`/sso/providers/${id}`, { method: 'DELETE' }),
+      check: (id: string) => request<{ ok: boolean; message: string }>(`/sso/providers/${id}/check`, { method: 'POST' }),
+      settings: () => request<SsoSettings>('/sso/settings'),
+      updateSettings: (dto: SsoSettings) =>
+        request<SsoSettings>('/sso/settings', { method: 'PUT', body: JSON.stringify(dto) }),
+    },
     license: {
       get: () => request<LicenseInfo>('/license'),
       set: (key: string) => request<LicenseInfo>('/license', { method: 'PUT', body: JSON.stringify({ key }) }),
@@ -80,7 +125,14 @@ export function createApi(
       list: () => request<User[]>('/users'),
       setRole: (id: string, role: UserRole) =>
         request<User>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+      setActive: (id: string, active: boolean) =>
+        request<User>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) }),
       remove: (id: string) => request<void>(`/users/${id}`, { method: 'DELETE' }),
+    },
+    scim: {
+      token: () => request<ScimTokenInfo>('/scim/token'),
+      createToken: () => request<CreatedScimToken>('/scim/token', { method: 'POST' }),
+      revokeToken: () => request<void>('/scim/token', { method: 'DELETE' }),
     },
     invitations: {
       list: () => request<Invitation[]>('/invitations'),

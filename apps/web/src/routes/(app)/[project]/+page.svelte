@@ -52,6 +52,7 @@
   import type { PageData, ActionData } from './$types';
   import type { CiProvider, Run } from '@optik/shared';
   import { untrack } from 'svelte';
+  import { formatBytes } from '$lib/utils';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -583,6 +584,26 @@
         </Table>
       </Card>
     {/if}
+    {#if data.teams.length > 0}
+      <h3 class="mt-6 mb-2 text-sm font-semibold">Teams with access</h3>
+      <Card>
+        <Table>
+          <TableBody>
+            {#each data.teams as team (team.teamId)}
+              <TableRow>
+                <TableCell class="font-medium">{team.name}</TableCell>
+                <TableCell class="text-sm text-muted-foreground">{team.members} member{team.members === 1 ? '' : 's'}</TableCell>
+                <TableCell class="text-sm capitalize">{team.role}</TableCell>
+              </TableRow>
+            {/each}
+          </TableBody>
+        </Table>
+      </Card>
+      <p class="mt-2 text-xs text-muted-foreground">
+        Members of these teams have at least the team's role in this project.
+        {#if data.user.role === 'admin'}<a href="/teams" class="underline">Manage teams</a>{/if}
+      </p>
+    {/if}
   </TabsContent>
 
   <!-- Settings tab -->
@@ -746,6 +767,55 @@
         {/if}
       </CardContent>
     </Card>
+
+    {#if data.storage}
+      {@const storage = data.storage}
+      <Card class="mt-4">
+        <CardContent class="p-6 space-y-4">
+          <div class="space-y-1">
+            <h3 class="text-sm font-semibold">Storage and retention</h3>
+            <p class="text-xs text-muted-foreground">
+              {formatBytes(storage.bytes)} in {storage.images} image{storage.images === 1 ? '' : 's'} ·
+              {storage.runs} run{storage.runs === 1 ? '' : 's'} · {storage.snapshots} snapshot{storage.snapshots === 1 ? '' : 's'}
+              {#if storage.unmeasured > 0}
+                · {storage.unmeasured} older image{storage.unmeasured === 1 ? '' : 's'} not measured yet (done daily)
+              {/if}
+            </p>
+          </div>
+          <form method="POST" action="?/setRetention" use:enhance class="flex flex-wrap items-end gap-3">
+            <div class="space-y-1.5">
+              <Label for="retention-days">Keep runs for (days)</Label>
+              <Input
+                id="retention-days"
+                name="days"
+                type="number"
+                min="1"
+                max="3650"
+                class="w-40"
+                value={data.project.retentionDays ?? ''}
+                placeholder="forever"
+              />
+            </div>
+            <Button type="submit" size="sm" variant="outline">Save</Button>
+            {#if data.project.retentionDays}
+              <Button type="submit" size="sm" variant="ghost" formaction="?/runRetention">Clean up now</Button>
+            {/if}
+          </form>
+          <p class="text-xs text-muted-foreground">
+            Enterprise. Every day, older runs and their images are removed. Baselines always stay: the newest accepted
+            snapshot of each name per suite and branch, and every baseline a newer run compares against.
+          </p>
+          {#if form && 'retentionError' in form}<p class="text-sm text-destructive">{form.retentionError}</p>{/if}
+          {#if form && 'retentionSaved' in form}<p class="text-sm text-green-700">Saved.</p>{/if}
+          {#if form && 'retentionResult' in form && form.retentionResult}
+            <p class="text-sm text-green-700">
+              Removed {form.retentionResult.runsDeleted} runs and {form.retentionResult.snapshotsDeleted} snapshots,
+              freed {formatBytes(form.retentionResult.bytesFreed)}.
+            </p>
+          {/if}
+        </CardContent>
+      </Card>
+    {/if}
   </TabsContent>
 </Tabs>
 

@@ -2,7 +2,7 @@
   import '../../app.css';
   import type { Snippet } from 'svelte';
   import { page } from '$app/state';
-  import { LayoutDashboard, FolderOpen, LogOut, Users, KeyRound, TriangleAlert, ScrollText } from 'lucide-svelte';
+  import { LayoutDashboard, FolderOpen, LogOut, Users, KeyRound, TriangleAlert, ScrollText, LogIn, UsersRound } from 'lucide-svelte';
   import type { LayoutData } from './$types';
 
   let { children, data }: { children: Snippet; data: LayoutData } = $props();
@@ -13,6 +13,8 @@
     ...(data.user.role === 'admin'
       ? [
           { label: 'Users', href: '/users', icon: Users },
+          { label: 'Teams', href: '/teams', icon: UsersRound },
+          { label: 'Single sign-on', href: '/sso', icon: LogIn },
           { label: 'Audit log', href: '/audit', icon: ScrollText },
           { label: 'License', href: '/license', icon: KeyRound },
         ]

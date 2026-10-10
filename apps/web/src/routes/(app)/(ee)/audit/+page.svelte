@@ -29,6 +29,10 @@
     'auth.login_failed': 'Sign-in failed',
     'user.role_changed': 'Changed instance role',
     'user.removed': 'Removed user',
+    'user.provisioned': 'Provisioned user',
+    'user.updated': 'Changed user',
+    'user.deactivated': 'Deactivated user',
+    'user.reactivated': 'Reactivated user',
     'invitation.created': 'Invited',
     'invitation.revoked': 'Revoked invitation',
     'invitation.accepted': 'Accepted invitation',
@@ -48,6 +52,19 @@
     'notification_channel.removed': 'Removed notification channel',
     'license.installed': 'Installed license',
     'license.removed': 'Removed license',
+    'sso.provider_created': 'Added identity provider',
+    'sso.provider_updated': 'Changed identity provider',
+    'sso.provider_removed': 'Removed identity provider',
+    'sso.settings_updated': 'Changed password sign-in',
+    'team.created': 'Created team',
+    'team.updated': 'Changed team',
+    'team.removed': 'Removed team',
+    'team.member_added': 'Added team member',
+    'team.member_removed': 'Removed team member',
+    'team.project_role_changed': "Changed team's project role",
+    'scim.token_created': 'Created SCIM token',
+    'scim.token_revoked': 'Revoked SCIM token',
+    'retention.applied': 'Cleaned up old runs',
   };
 
   const GROUPS = [
@@ -61,6 +78,10 @@
     ['project.', 'Projects'],
     ['token.', 'API tokens'],
     ['notification_channel.', 'Notifications'],
+    ['team.', 'Teams'],
+    ['sso.', 'Single sign-on'],
+    ['scim.', 'SCIM'],
+    ['retention.', 'Retention'],
     ['license.', 'License'],
   ] as const;
 

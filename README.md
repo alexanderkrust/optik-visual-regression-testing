@@ -87,6 +87,12 @@ For Kubernetes, `INSTALL.md` explains how to copy the images into an internal re
 - **Failed sign-ins are limited per account** (`LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES`), counted in memory per instance.
 - **Security headers**: Content-Security-Policy for the web UI, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS over HTTPS.
 
+### Monitoring
+
+- **Metrics:** Prometheus format at `/api/metrics` — HTTP requests by route, submitted snapshots by result, diff duration and queue, completed runs, reviews, open changes, notification and commit status deliveries, the license edition, and Node.js process metrics. Protect it with `METRICS_TOKEN`; the Helm chart can create a `ServiceMonitor` (`metrics.serviceMonitor.enabled`).
+- **Logs:** `LOG_FORMAT=json` writes one JSON object per line, including an access log. Every request gets an `X-Request-Id` (taken over from a proxy if present), which appears in the logs and the response.
+- **Tracing:** with `OTEL_EXPORTER_OTLP_ENDPOINT` set, optik sends OpenTelemetry traces of incoming requests, database queries and outgoing calls (CI systems, notifications, identity providers). Without it, nothing is loaded.
+
 ### Verifying releases
 
 Every release image and Helm chart is signed with [cosign](https://github.com/sigstore/cosign) (keyless, via GitHub Actions OIDC) and comes with an SPDX SBOM — as a registry attestation and as a release asset.
@@ -213,6 +219,46 @@ Admins find under *Audit log* who did what, when and from where — sign-ins and
 - optik never deletes audit events. Behind a reverse proxy, make sure it sets `X-Forwarded-For`, so the client's address is recorded.
 
 Events are recorded while the Enterprise edition is in effect.
+
+### Single sign-on (Enterprise)
+
+Admins add identity providers under *Single sign-on*. optik speaks **OpenID Connect** (authorization code flow with PKCE) and **SAML 2.0** (signed assertions, HTTP-Redirect / HTTP-POST); each provider becomes a button on the sign-in page.
+
+1. **OpenID Connect:** register optik at the provider as a web application with the **redirect URI** optik shows (`https://<optik>/api/auth/sso/<id>/callback`), create a client secret, and enter issuer URL, client ID and secret in optik. *Check connection* reads the provider's discovery document.
+2. **SAML:** enter the provider's entity ID, sign-in URL and signing certificate in optik, then give the provider optik's **entity ID** and **reply URL** (shown after saving) — or import optik's **metadata** (`/api/auth/sso/<id>/metadata`). Send the e-mail address and groups as attributes (names configurable; the NameID is used if there's no e-mail attribute). *Check connection* shows how long the certificate is valid.
+3. Optional: **roles from groups** — map a group to *optik admin*, to a role in a project, or to a team. Roles a mapping covers follow the provider on every sign-in (the admin role if any group maps to it; the role in each project a mapping names); everything else stays managed in optik. The last admin is never demoted.
+4. Optional: restrict sign-ins to e-mail domains, turn off account creation (then only invited people can sign in), and under *Passwords* allow passwords **only for admins** — they keep them as a way in if the provider is down.
+
+| Provider | Issuer | Groups |
+|---|---|---|
+| Entra ID | `https://login.microsoftonline.com/<tenant-id>/v2.0` | *Token configuration → Add groups claim* (group object IDs; for large tenants assign groups to the app) |
+| Entra ID (SAML) | entity ID `https://sts.windows.net/<tenant-id>/` | groups attribute `http://schemas.microsoft.com/ws/2008/06/identity/claims/groups`, e-mail `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress` |
+| ADFS (SAML) | entity ID `http://<adfs-host>/adfs/services/trust` | claim rules for e-mail and group attributes |
+| Okta | `https://<org>.okta.com` or a custom authorization server | a `groups` claim in the authorization server |
+| Keycloak | `https://<host>/realms/<realm>` | client scope with a *Group Membership* mapper named `groups` |
+| Google | `https://accounts.google.com` | no groups — use allowed domains |
+
+Accounts are created on the first sign-in (role *member*) and linked to the provider's subject ID, so they survive e-mail changes; an existing account with the same e-mail address is linked. Sign-ins with an e-mail address the provider marks as unverified are refused. Behind a reverse proxy, make sure it passes `Host` / `X-Forwarded-Host` and `X-Forwarded-Proto`, or set `PUBLIC_URL` — the redirect URI is built from them.
+
+### Storage and retention
+
+Every project shows under *Settings → Storage and retention* how much its screenshots and diff images take; admins see it for all projects on the project list. optik records image sizes as it stores them (older images are measured by a daily job).
+
+**Retention (Enterprise):** set how many days runs are kept. Every day — or with *Clean up now* — older runs and their images are removed, but baselines always stay: the newest accepted snapshot of each name per suite and branch, and every baseline a newer run compares against. Reviews keep working exactly as before; each clean-up appears in the audit log. With several instances, only one runs the daily job at a time.
+
+### Provisioning with SCIM (Enterprise)
+
+Entra ID, Okta and other identity providers can manage optik's accounts over SCIM 2.0: under *Single sign-on → Provisioning (SCIM)*, create a token and enter it at the provider together with the SCIM base URL (`https://<optik>/api/scim/v2`).
+
+- **Users** become optik accounts (e-mail = `userName`, without a password — they sign in with single sign-on). Deactivating them at the provider **deactivates** them in optik: running sessions end, sign-in and API access are refused, they no longer count as reviewers, and their reviews and comments stay. Deleting removes the account.
+- **Groups** become **teams** with the same members; give the teams roles in projects under *Teams*.
+- Every change appears in the audit log as made by *SCIM*. The last admin is never deactivated or deleted.
+
+Admins can also deactivate and reactivate accounts by hand under *Users*.
+
+### Teams (Enterprise)
+
+Admins group people under *Teams* and give a team a role in projects. A person's role in a project is the highest of their own and their teams'; teams count towards the licensed reviewers like direct roles. Single sign-on can fill teams from the identity provider's groups (map a group to a team). Maintainers see under *Members* which teams have access. Access through existing teams keeps working if the license ends — only managing teams needs it.
 
 ### Test suites
 
@@ -394,6 +440,45 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | GET | `/api/audit-events/export` | Same filters, `format=csv` or `jsonl` |
 | GET | `/api/audit-events/verify` | Recompute the hash chain (admins) |
 
+### Single sign-on (Enterprise)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/auth/sso/providers` | Sign-in options (public) |
+| GET | `/api/auth/sso/:id/start` | Redirects to the provider (`?returnTo=/path`) |
+| GET | `/api/auth/sso/:id/callback` | OIDC: the provider's redirect target |
+| POST | `/api/auth/sso/:id/callback` | SAML: assertion consumer service (HTTP-POST) |
+| GET | `/api/auth/sso/:id/metadata` | SAML service provider metadata |
+| POST | `/api/auth/sso/exchange` | One-time code → session (used by the web UI's server) |
+| GET/POST | `/api/sso/providers` | List / add providers (admin) |
+| PUT/DELETE | `/api/sso/providers/:id` | Change / remove a provider (admin) |
+| POST | `/api/sso/providers/:id/check` | Read the discovery document (admin) |
+| GET/PUT | `/api/sso/settings` | `passwordLogin`: `all` or `admins` (admin) |
+
+### Storage and retention
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/projects/:slug/storage` | Storage a project uses (maintainer) |
+| GET | `/api/storage` | Storage per project, largest first (admin) |
+| PUT | `/api/projects/:slug/retention` | Keep runs for `{ "days": 90 }` (`null` = forever; Enterprise, maintainer) |
+| POST | `/api/projects/:slug/retention/run` | Clean up now (Enterprise, maintainer) |
+
+### SCIM 2.0 (Enterprise; SCIM token)
+
+`/api/scim/v2`: `ServiceProviderConfig`, `ResourceTypes`, `Users` and `Groups` (GET with `filter=<attribute> eq "<value>"`, `startIndex`, `count`; POST; PUT; PATCH; DELETE). Admins manage the token with `GET/POST/DELETE /api/scim/token`.
+
+### Teams (Enterprise; admins)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | `/api/teams` | List / create teams |
+| PUT/DELETE | `/api/teams/:id` | Rename / remove a team |
+| POST | `/api/teams/:id/members` | Add a user by e-mail |
+| DELETE | `/api/teams/:id/members/:userId` | Remove a member |
+| PUT | `/api/teams/:id/projects/:slug` | Set the team's role in a project (`{ "role": null }` removes it) |
+| GET | `/api/projects/:slug/teams` | Teams with access to a project (maintainer) |
+
 ### License (admin)
 
 | Method | Path | Description |
@@ -408,7 +493,7 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 |--------|------|-------------|
 | GET | `/api/auth/me` | The signed-in user incl. role |
 | GET | `/api/users` | List users (admin) |
-| PATCH | `/api/users/:id` | Change a user's role (admin) |
+| PATCH | `/api/users/:id` | Change a user's role (`{ role }`) or deactivate / reactivate (`{ active }`) (admin) |
 | DELETE | `/api/users/:id` | Remove a user (admin) |
 | POST | `/api/invitations` | Invite by email, optionally into a project (admin) |
 | GET | `/api/invitations` | Pending invitations (admin) |
@@ -481,6 +566,11 @@ Only `DATABASE_URL` is required. Every variable also accepts a `<NAME>_FILE` var
 | `SMTP_URL` | — | SMTP server for e-mail notifications and invitations, e.g. `smtps://user:pass@mail.example.com:465` or `smtp://mail.example.com:587` |
 | `SMTP_FROM` | `optik <optik@localhost>` | Sender of e-mails |
 | `OPTIK_LICENSE` | — | License key (instead of entering it under *License*); `OPTIK_LICENSE_FILE` reads it from a file |
+| `LOG_FORMAT` | `text` (image), `json` (Helm chart) | `json`: one JSON object per line with request IDs, for log collectors |
+| `LOG_REQUESTS` | on with `json` | Access log (`true` / `false`); health checks and scrapes are left out |
+| `METRICS_ENABLED` | `true` | Prometheus metrics at `/api/metrics` |
+| `METRICS_TOKEN` | — | Require this bearer token for `/api/metrics` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Send OpenTelemetry traces (OTLP/HTTP) there; the other `OTEL_*` variables apply (`OTEL_SERVICE_NAME`, headers, …) |
 | `ORIGIN` | derived from request | Public URL, only needed if a reverse proxy doesn't send `X-Forwarded-Proto` / `X-Forwarded-Host` |
 
 Adapters read `OPTIK_SERVER_URL` (default `http://localhost:3000`) — the URL of your optik instance — and optionally `OPTIK_BRANCH` / `OPTIK_COMMIT` / `OPTIK_PULL_REQUEST` to override the detected branch, commit and pull request.
@@ -495,7 +585,7 @@ optik is open source under the [Apache License 2.0](LICENSE). Enterprise feature
 |---|---|---|
 | Community | 5 | — |
 | Team | as licensed | — |
-| Enterprise | as licensed | audit log; SSO, teams, SCIM, retention policies (in development) |
+| Enterprise | as licensed | audit log, single sign-on (OIDC, SAML), SCIM provisioning, teams, retention policies |
 
 *Reviewers* are the people who can accept or reject changes: admins, and maintainers and reviewers of any project. Developers who only run tests, and viewers, don't count.
 

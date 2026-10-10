@@ -11,6 +11,8 @@ export interface User {
   id: string;
   email: string;
   role: UserRole;
+  /** False when the account was switched off (by an admin or SCIM) */
+  active: boolean;
   createdAt: string;
 }
 
@@ -73,6 +75,8 @@ export interface Project {
   ciApiUrl: string | null;
   /** Whether a token is stored — the token itself is never returned */
   ciTokenConfigured: boolean;
+  /** Retention (Enterprise): days runs are kept; null keeps everything */
+  retentionDays: number | null;
   /** The signed-in user's role in this project */
   myRole: EffectiveProjectRole;
   createdAt: string;
@@ -356,6 +360,10 @@ export type AuditAction =
   | 'auth.login_failed'
   | 'user.role_changed'
   | 'user.removed'
+  | 'user.provisioned'
+  | 'user.updated'
+  | 'user.deactivated'
+  | 'user.reactivated'
   | 'invitation.created'
   | 'invitation.revoked'
   | 'invitation.accepted'
@@ -374,7 +382,20 @@ export type AuditAction =
   | 'notification_channel.created'
   | 'notification_channel.removed'
   | 'license.installed'
-  | 'license.removed';
+  | 'license.removed'
+  | 'sso.provider_created'
+  | 'sso.provider_updated'
+  | 'sso.provider_removed'
+  | 'sso.settings_updated'
+  | 'team.created'
+  | 'team.updated'
+  | 'team.removed'
+  | 'team.member_added'
+  | 'team.member_removed'
+  | 'team.project_role_changed'
+  | 'scim.token_created'
+  | 'scim.token_revoked'
+  | 'retention.applied';
 
 export interface AuditActor {
   /** A signed-in user, a project's API token (adapters), or nobody (e.g. a failed sign-in) */
@@ -409,4 +430,150 @@ export interface AuditVerification {
   checked: number;
   /** First event whose hash doesn't match — the log was changed from there on */
   firstInvalidSeq: number | null;
+}
+
+// ------------------------------------------------------------------ single sign-on
+
+/**
+ * Maps an identity provider group to a role. Without project and team it
+ * makes members of the group instance admins; with a project slug it sets
+ * their role in that project; with a team name it makes them team members
+ * (role "member"). Roles and teams that mappings cover follow the provider on
+ * every sign-in; everything else stays managed in optik.
+ */
+export interface SsoRoleMapping {
+  group: string;
+  project: string | null;
+  team?: string | null;
+  role: 'admin' | 'member' | ProjectRole;
+}
+
+export type IdpProtocol = 'oidc' | 'saml';
+
+/** An OpenID Connect or SAML 2.0 provider, as admins configure it (`/sso/providers`). */
+export interface IdentityProvider {
+  id: string;
+  name: string;
+  protocol: IdpProtocol;
+  /** OIDC: issuer URL. SAML: the provider's entity ID */
+  issuer: string;
+  /** OIDC only */
+  clientId: string | null;
+  /** The secret itself is never returned */
+  clientSecretConfigured: boolean;
+  scopes: string;
+  groupsClaim: string;
+  roleMappings: SsoRoleMapping[];
+  allowedDomains: string[];
+  createUsers: boolean;
+  enabled: boolean;
+  /** SAML: the provider's sign-in URL */
+  samlEntryPoint: string | null;
+  /** SAML: the provider's signing certificate (PEM) */
+  samlCertificate: string | null;
+  /** SAML: attribute with the e-mail address (else the NameID) */
+  emailAttribute: string;
+  /** Register this at the provider (OIDC redirect URI, SAML ACS URL) */
+  redirectUri: string;
+  /** SAML: optik's entity ID and metadata URL */
+  spEntityId: string;
+  metadataUrl: string;
+}
+
+export interface SaveIdentityProviderDto {
+  name: string;
+  /** Default "oidc"; can't be changed later */
+  protocol?: IdpProtocol;
+  issuer: string;
+  /** OIDC */
+  clientId?: string;
+  /** Write-only. Omit to keep; changing the issuer without a new secret removes it */
+  clientSecret?: string;
+  scopes?: string;
+  groupsClaim?: string;
+  roleMappings?: SsoRoleMapping[];
+  allowedDomains?: string[];
+  createUsers?: boolean;
+  enabled?: boolean;
+  /** SAML */
+  samlEntryPoint?: string;
+  samlCertificate?: string;
+  emailAttribute?: string;
+}
+
+/** Who may still sign in with a password once single sign-on is set up. */
+export type PasswordLogin = 'all' | 'admins';
+
+export interface SsoSettings {
+  passwordLogin: PasswordLogin;
+}
+
+/** Shown on the sign-in page (`GET /auth/sso/providers`). */
+export interface SsoLoginOption {
+  id: string;
+  name: string;
+}
+
+// ------------------------------------------------------------------ teams
+
+/** A group of users with roles in projects (Enterprise, `/teams`). */
+export interface Team {
+  id: string;
+  name: string;
+  description: string | null;
+  members: { userId: string; email: string }[];
+  projects: { projectId: string; slug: string; name: string; role: ProjectRole }[];
+}
+
+export interface SaveTeamDto {
+  name: string;
+  description?: string | null;
+}
+
+/** `GET /projects/:slug/teams` — teams with access to a project. */
+export interface ProjectTeam {
+  teamId: string;
+  name: string;
+  role: ProjectRole;
+  members: number;
+}
+
+// ------------------------------------------------------------------ SCIM
+
+/** `GET /scim/token`: whether provisioning is set up — the token itself is shown only once. */
+export interface ScimTokenInfo {
+  configured: boolean;
+  /** First characters, to recognise it */
+  prefix: string | null;
+  createdAt: string | null;
+  /** Base URL to enter at the identity provider */
+  endpoint: string;
+}
+
+export interface CreatedScimToken extends ScimTokenInfo {
+  token: string;
+}
+
+// ------------------------------------------------------------------ storage and retention
+
+/** `GET /projects/:slug/storage`, `GET /storage` (all projects, admins). */
+export interface ProjectStorage {
+  projectId: string;
+  slug: string;
+  name: string;
+  /** Bytes of screenshots and diff images */
+  bytes: number;
+  /** Stored image files */
+  images: number;
+  runs: number;
+  snapshots: number;
+  /** Images stored before optik recorded sizes, not measured yet (done daily) */
+  unmeasured: number;
+}
+
+/** What a retention run removed (`POST /projects/:slug/retention/run`). */
+export interface RetentionResult {
+  runsDeleted: number;
+  snapshotsDeleted: number;
+  bytesFreed: number;
 }
