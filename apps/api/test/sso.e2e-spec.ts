@@ -119,6 +119,21 @@ describe('single sign-on (Enterprise)', () => {
     expect((await call(`${t.api}/projects/blog/members`, { token: admin.jwt })).body).toHaveLength(1);
   });
 
+  it('maps groups to teams', async () => {
+    await admin.createProject('shop');
+    const team = (await call(`${t.api}/teams`, { token: admin.jwt, json: { name: 'Frontend' } })).body;
+    await call(`${t.api}/teams/${team.id}/projects/shop`, { method: 'PUT', token: admin.jwt, json: { role: 'reviewer' } });
+    const provider = await addProvider({ roleMappings: [{ group: 'fe', project: null, team: 'Frontend', role: 'member' }] });
+
+    const session = await signIn(provider.id, { ...alice, groups: ['fe'] });
+    const project = (await call(`${t.api}/projects/shop`, { token: session.accessToken })).body;
+    expect(project.myRole).toBe('reviewer');
+
+    const later = await signIn(provider.id, { ...alice, groups: [] });
+    expect((await call(`${t.api}/projects/shop`, { token: later.accessToken })).status).toBe(404);
+    expect((await call(`${t.api}/teams`, { token: admin.jwt })).body[0].members).toEqual([]);
+  });
+
   it('reads groups from the userinfo endpoint and a custom claim', async () => {
     await admin.createProject('shop');
     const provider = await addProvider({
@@ -211,6 +226,7 @@ describe('single sign-on (Enterprise)', () => {
     expect((await create({ ...valid, scopes: 'email' })).status).toBe(400);
     expect((await create({ ...valid, roleMappings: [{ group: 'g', project: null, role: 'viewer' }] })).status).toBe(400);
     expect((await create({ ...valid, roleMappings: [{ group: 'g', project: 'shop', role: 'owner' }] })).status).toBe(400);
+    expect((await create({ ...valid, roleMappings: [{ group: 'g', project: 'shop', team: 'T', role: 'viewer' }] })).status).toBe(400);
     expect((await create({ ...valid, allowedDomains: ['not a domain'] })).status).toBe(400);
 
     const ok = (await create(valid)).body;

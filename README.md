@@ -220,7 +220,7 @@ Admins add identity providers under *Single sign-on*. optik speaks OpenID Connec
 
 1. Register optik at the provider as a web application with the **redirect URI** optik shows (`https://<optik>/api/auth/sso/<id>/callback`) and create a client secret.
 2. In optik: name, **issuer URL**, client ID and secret. *Check connection* reads the provider's discovery document.
-3. Optional: **roles from groups** — map a group to *optik admin* or to a role in a project. Roles a mapping covers follow the provider on every sign-in (the admin role if any group maps to it; the role in each project a mapping names); everything else stays managed in optik. The last admin is never demoted.
+3. Optional: **roles from groups** — map a group to *optik admin*, to a role in a project, or to a team. Roles a mapping covers follow the provider on every sign-in (the admin role if any group maps to it; the role in each project a mapping names); everything else stays managed in optik. The last admin is never demoted.
 4. Optional: restrict sign-ins to e-mail domains, turn off account creation (then only invited people can sign in), and under *Passwords* allow passwords **only for admins** — they keep them as a way in if the provider is down.
 
 | Provider | Issuer URL | Groups |
@@ -231,6 +231,10 @@ Admins add identity providers under *Single sign-on*. optik speaks OpenID Connec
 | Google | `https://accounts.google.com` | no groups — use allowed domains |
 
 Accounts are created on the first sign-in (role *member*) and linked to the provider's subject ID, so they survive e-mail changes; an existing account with the same e-mail address is linked. Sign-ins with an e-mail address the provider marks as unverified are refused. Behind a reverse proxy, make sure it passes `Host` / `X-Forwarded-Host` and `X-Forwarded-Proto`, or set `PUBLIC_URL` — the redirect URI is built from them.
+
+### Teams (Enterprise)
+
+Admins group people under *Teams* and give a team a role in projects. A person's role in a project is the highest of their own and their teams'; teams count towards the licensed reviewers like direct roles. Single sign-on can fill teams from the identity provider's groups (map a group to a team). Maintainers see under *Members* which teams have access. Access through existing teams keeps working if the license ends — only managing teams needs it.
 
 ### Test suites
 
@@ -425,6 +429,17 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/sso/providers/:id/check` | Read the discovery document (admin) |
 | GET/PUT | `/api/sso/settings` | `passwordLogin`: `all` or `admins` (admin) |
 
+### Teams (Enterprise; admins)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | `/api/teams` | List / create teams |
+| PUT/DELETE | `/api/teams/:id` | Rename / remove a team |
+| POST | `/api/teams/:id/members` | Add a user by e-mail |
+| DELETE | `/api/teams/:id/members/:userId` | Remove a member |
+| PUT | `/api/teams/:id/projects/:slug` | Set the team's role in a project (`{ "role": null }` removes it) |
+| GET | `/api/projects/:slug/teams` | Teams with access to a project (maintainer) |
+
 ### License (admin)
 
 | Method | Path | Description |
@@ -526,7 +541,7 @@ optik is open source under the [Apache License 2.0](LICENSE). Enterprise feature
 |---|---|---|
 | Community | 5 | — |
 | Team | as licensed | — |
-| Enterprise | as licensed | audit log, single sign-on (OIDC); teams, SAML/SCIM, retention policies (in development) |
+| Enterprise | as licensed | audit log, single sign-on (OIDC), teams; SAML/SCIM, retention policies (in development) |
 
 *Reviewers* are the people who can accept or reject changes: admins, and maintainers and reviewers of any project. Developers who only run tests, and viewers, don't count.
 

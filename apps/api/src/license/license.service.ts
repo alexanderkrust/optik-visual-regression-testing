@@ -126,11 +126,15 @@ export class LicenseService {
     return this.info();
   }
 
-  /** People who can accept or reject changes: admins, and reviewers and maintainers of any project. */
+  /** People who can accept or reject changes: admins, and reviewers and maintainers of any project (also through teams). */
   reviewerCount(): Promise<number> {
     return this.prisma.user.count({
       where: {
-        OR: [{ role: 'admin' }, { memberships: { some: { role: { in: ['reviewer', 'maintainer'] } } } }],
+        OR: [
+          { role: 'admin' },
+          { memberships: { some: { role: { in: ['reviewer', 'maintainer'] } } } },
+          { teams: { some: { team: { projects: { some: { role: { in: ['reviewer', 'maintainer'] } } } } } } },
+        ],
       },
     });
   }

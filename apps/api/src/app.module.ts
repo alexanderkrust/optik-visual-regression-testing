@@ -17,6 +17,7 @@ import { LicenseModule } from './license/license.module';
 import { AuditModule } from './audit/audit.module';
 import { AuditLogModule } from './ee/audit/audit-log.module';
 import { SsoModule } from './ee/sso/sso.module';
+import { TeamsModule } from './ee/teams/teams.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { SsoModule } from './ee/sso/sso.module';
     // Enterprise (ee/): only active with a license that includes the feature
     AuditLogModule,
     SsoModule,
+    TeamsModule,
   ],
   controllers: [AppController],
 })
