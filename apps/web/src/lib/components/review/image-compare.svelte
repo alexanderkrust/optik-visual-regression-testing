@@ -180,9 +180,14 @@
     {#if label}
       <p class="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
     {/if}
+    <!-- Focusable, so zoomed images can be scrolled with the keyboard -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div
-      class="checker max-h-[75vh] overflow-auto rounded-md border"
+      class="checker max-h-[75vh] overflow-auto rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       bind:this={panes[paneIndex]}
+      role="region"
+      aria-label={label ?? name}
+      tabindex="0"
       onscroll={(e) => mode === 'side' && syncScroll(e.currentTarget)}
     >
       <div class="relative" style="width: {px(canvas.w)}; height: {px(canvas.h)}">
@@ -213,9 +218,23 @@
       <div
         class="absolute inset-0 cursor-ew-resize touch-none"
         role="slider"
-        tabindex="-1"
+        tabindex="0"
         aria-label="Before / after divider"
+        aria-valuemin={0}
+        aria-valuemax={100}
         aria-valuenow={Math.round(split)}
+        aria-valuetext="{Math.round(split)}% before"
+        onkeydown={(e) => {
+          const step = e.shiftKey ? 20 : 5;
+          if (e.key === 'ArrowLeft') split = Math.max(0, split - step);
+          else if (e.key === 'ArrowRight') split = Math.min(100, split + step);
+          else if (e.key === 'Home') split = 0;
+          else if (e.key === 'End') split = 100;
+          else return;
+          // Keep the page's arrow shortcuts from also firing
+          e.preventDefault();
+          e.stopPropagation();
+        }}
         onpointerdown={(e) => {
           sliding = true;
           e.currentTarget.setPointerCapture(e.pointerId);
