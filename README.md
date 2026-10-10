@@ -12,7 +12,7 @@ optik/
 ├── packages/
 │   ├── core/         # Diff engine (pixelmatch), image utils, git helpers, API client for adapters
 │   ├── shared/       # TypeScript types & constants shared across all packages
-│   ├── cli/          # `optik upload` — screenshots from any tool
+│   ├── cli/          # `optik upload` and `optik storybook`
 │   └── adapters/
 │       ├── vitest/       # Vitest adapter
 │       └── playwright/   # Playwright adapter
@@ -440,6 +440,42 @@ Every PNG under the directory becomes a snapshot named after its path without `.
 | `--concurrency` | `4` | Parallel uploads |
 
 Use the same file names in every run — a renamed file is a new snapshot.
+
+### Storybook
+
+Every story becomes a snapshot — no test code needed:
+
+```bash
+npm install -D @optik/cli playwright && npx playwright install chromium
+npx storybook build
+OPTIK_TOKEN=optik_… npx optik storybook          # ./storybook-static, or a URL like http://localhost:6006
+```
+
+optik serves the build, opens each story in Chromium (`iframe.html?id=…`), waits until Storybook reports it rendered — play functions included — and for web fonts and images, then screenshots the story's root element. Snapshots are named `Title/Story` (e.g. `Components/Button/Primary`) in the suite `storybook`. To keep screenshots identical between runs, animations and transitions are stopped, the caret is hidden and `prefers-reduced-motion` is set.
+
+Per story, component or globally (in `.storybook/preview`), with `parameters`:
+
+```ts
+export const Clock: Story = {
+  parameters: {
+    optik: {
+      disable: true,   // no snapshot of this story
+      delay: 300,      // wait after rendering, e.g. for a chart that animates in JavaScript
+      fullPage: true,  // the whole page instead of the story's root — for modals in a portal (default with layout: 'fullscreen')
+    },
+  },
+}
+```
+
+Coming from Chromatic? `chromatic: { disableSnapshot, delay }` are honoured as well.
+
+| Option | Default | |
+|---|---|---|
+| `--viewport` | `1280x720` | Browser window |
+| `--concurrency` | `4` | Stories rendered in parallel |
+| `--timeout` | `30` | Seconds a story may take to render |
+
+Exit codes as for `optik upload`; a story that fails to render (an error, or the timeout) exits with `2`, after the other stories were uploaded. Supports Storybook 7 and later (`index.json`) and 6.4+ (`stories.json`).
 
 ### API tokens
 

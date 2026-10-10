@@ -1,29 +1,10 @@
 import { readdir, readFile, stat } from 'fs/promises';
 import { join, relative, sep } from 'path';
-import { OptikClient, shouldFail } from '@optik/core';
-import type { Run, SubmittedSnapshot } from '@optik/shared';
+import { pool, withRun, type RunOptions, type RunResult } from './run';
 
-export interface UploadOptions {
-  /** Project-scoped API token (optik_...) */
-  token: string;
-  serverUrl?: string;
-  /** Runs are merged and baselines are kept per suite */
-  suite: string;
-  /** Overrides the project setting "Fail tests on visual changes" */
-  failOnChanges?: boolean;
+export interface UploadOptions extends RunOptions {
   /** Parallel uploads */
   concurrency?: number;
-  /** Progress output; nothing when omitted */
-  log?: (line: string) => void;
-}
-
-export interface UploadResult {
-  run: Run;
-  /** Link to the run in the web UI */
-  runUrl: string;
-  snapshots: { name: string; result: SubmittedSnapshot }[];
-  /** Snapshots that fail the run (changes, unless turned off) */
-  failed: number;
 }
 
 /**
@@ -61,49 +42,9 @@ async function walk(dir: string): Promise<string[]> {
   return files.flat();
 }
 
-const LABEL: Record<SubmittedSnapshot['status'], string> = {
-  new: '+ new      ',
-  unchanged: '  unchanged',
-  pending: '● changed  ',
-  approved: '✓ accepted ',
-  rejected: '✗ rejected ',
-};
-
 /** Starts a run, uploads the screenshots and completes the run. */
-export async function upload(
-  screenshots: { name: string; file: string }[],
-  options: UploadOptions,
-): Promise<UploadResult> {
-  const log = options.log ?? (() => {});
-  const client = new OptikClient({ token: options.token, serverUrl: options.serverUrl });
-  const run = await client.createRun({ suite: options.suite });
-  log(`Run ${run.id.slice(0, 8)} · ${run.branch} · suite ${run.suite} · ${screenshots.length} screenshots`);
-
-  const snapshots: UploadResult['snapshots'] = [];
-  let next = 0;
-  let aborted = false;
-  const worker = async () => {
-    while (next < screenshots.length && !aborted) {
-      const { name, file } = screenshots[next++];
-      const result = await client.submit(run.id, name, await readFile(file)).catch((e) => {
-        // Stop the other uploads; the run stays incomplete
-        aborted = true;
-        throw e;
-      });
-      snapshots.push({ name, result });
-      const score = result.status === 'pending' ? ` ${((result.diffScore ?? 0) * 100).toFixed(2)}%` : '';
-      log(`  ${LABEL[result.status]} ${name}${score}`);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.max(1, options.concurrency ?? 4) }, worker));
-
-  // A run without changes is merged into the previous one — link to that
-  const completed = await client.complete(run.id);
-  snapshots.sort((a, b) => a.name.localeCompare(b.name));
-  return {
-    run: completed,
-    runUrl: client.url(`/${completed.projectSlug}/${completed.id}`),
-    snapshots,
-    failed: snapshots.filter((s) => shouldFail(s.result, options.failOnChanges)).length,
-  };
+export function upload(screenshots: { name: string; file: string }[], options: UploadOptions): Promise<RunResult> {
+  return withRun(options, `${screenshots.length} screenshots`, (submit) =>
+    pool(screenshots, options.concurrency ?? 4, async ({ name, file }) => submit(name, await readFile(file))),
+  );
 }
