@@ -2,64 +2,66 @@
   import { FolderOpen, CalendarDays, Layers, ArrowRight } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '$lib/components/ui/card';
+  import { useI18n } from '$lib/i18n';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
+  const { m, f } = useI18n();
 
   const recentProjects = $derived(data.projects.slice(0, 6));
 </script>
 
-<svelte:head><title>Dashboard — optik</title></svelte:head>
+<svelte:head><title>{m.common.title(m.nav.dashboard)}</title></svelte:head>
 
 <div class="mb-8">
-  <h1 class="text-2xl font-bold tracking-tight">Dashboard</h1>
-  <p class="text-muted-foreground text-sm mt-1">Overview of your visual regression workspace</p>
+  <h1 class="text-2xl font-bold tracking-tight">{m.nav.dashboard}</h1>
+  <p class="text-muted-foreground text-sm mt-1">{m.dashboard.subtitle}</p>
 </div>
 
 <div class="grid gap-4 sm:grid-cols-3 mb-8">
   <Card>
     <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle level={2} class="text-sm font-medium">Total Projects</CardTitle>
+      <CardTitle level={2} class="text-sm font-medium">{m.dashboard.totalProjects}</CardTitle>
       <FolderOpen class="text-muted-foreground h-4 w-4" />
     </CardHeader>
     <CardContent>
       <div class="text-2xl font-bold">{data.projects.length}</div>
-      <p class="text-muted-foreground text-xs mt-1">Active visual regression projects</p>
+      <p class="text-muted-foreground text-xs mt-1">{m.dashboard.activeProjects}</p>
     </CardContent>
   </Card>
   <Card>
     <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle level={2} class="text-sm font-medium">Environments</CardTitle>
+      <CardTitle level={2} class="text-sm font-medium">{m.dashboard.environments}</CardTitle>
       <Layers class="text-muted-foreground h-4 w-4" />
     </CardHeader>
     <CardContent>
       <div class="text-2xl font-bold">{data.projects.length}</div>
-      <p class="text-muted-foreground text-xs mt-1">Across all projects</p>
+      <p class="text-muted-foreground text-xs mt-1">{m.dashboard.acrossProjects}</p>
     </CardContent>
   </Card>
   <Card>
     <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle level={2} class="text-sm font-medium">Last Created</CardTitle>
+      <CardTitle level={2} class="text-sm font-medium">{m.dashboard.lastCreated}</CardTitle>
       <CalendarDays class="text-muted-foreground h-4 w-4" />
     </CardHeader>
     <CardContent>
       {#if data.projects.length > 0}
         <div class="text-2xl font-bold">
-          {new Date(data.projects[0].createdAt).toLocaleDateString('de', { month: 'short', day: 'numeric' })}
+          {f.date(data.projects[0].createdAt)}
         </div>
         <p class="text-muted-foreground text-xs mt-1">{data.projects[0].name}</p>
       {:else}
         <div class="text-2xl font-bold">—</div>
-        <p class="text-muted-foreground text-xs mt-1">No projects yet</p>
+        <p class="text-muted-foreground text-xs mt-1">{m.dashboard.noProjects}</p>
       {/if}
     </CardContent>
   </Card>
 </div>
 
 <div class="flex items-center justify-between mb-4">
-  <h2 class="text-lg font-semibold">Recent Projects</h2>
+  <h2 class="text-lg font-semibold">{m.dashboard.recentProjects}</h2>
   <Button variant="ghost" size="sm" href="/projects" class="gap-1 text-muted-foreground">
-    View all
+    {m.dashboard.viewAll}
     <ArrowRight class="h-3.5 w-3.5" />
   </Button>
 </div>
@@ -68,11 +70,9 @@
   <Card>
     <CardContent class="flex flex-col items-center justify-center py-12 text-center">
       <FolderOpen class="text-muted-foreground mb-3 h-10 w-10" />
-      <h3 class="font-semibold">No projects yet</h3>
-      <p class="text-muted-foreground text-sm mt-1 mb-4">
-        Head over to Projects to create your first one.
-      </p>
-      <Button href="/projects" variant="outline" size="sm">Go to Projects</Button>
+      <h3 class="font-semibold">{m.dashboard.noProjects}</h3>
+      <p class="text-muted-foreground text-sm mt-1 mb-4">{m.dashboard.noProjectsHint}</p>
+      <Button href="/projects" variant="outline" size="sm">{m.dashboard.goToProjects}</Button>
     </CardContent>
   </Card>
 {:else}
@@ -86,11 +86,7 @@
           </CardHeader>
           <CardContent>
             <p class="text-muted-foreground text-xs">
-              Created {new Date(project.createdAt).toLocaleDateString('de', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-              })}
+              {m.projects.created(f.date(project.createdAt))}
             </p>
           </CardContent>
         </Card>

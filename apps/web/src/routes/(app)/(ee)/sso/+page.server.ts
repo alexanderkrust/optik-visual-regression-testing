@@ -2,12 +2,13 @@
 // the optik Enterprise License (ee/LICENSE in the repository root), not Apache-2.0.
 import { error, fail } from '@sveltejs/kit';
 import type { PasswordLogin, ProjectRole, SaveIdentityProviderDto, SsoRoleMapping } from '@optik/shared';
+import { messages } from '$lib/i18n';
 import { serverApi } from '$lib/server/api';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
   const { user } = await event.parent();
-  if (user.role !== 'admin') error(403, 'Only admins can set up single sign-on');
+  if (user.role !== 'admin') error(403, messages(event.locals.locale).sso.adminsOnly);
   const api = serverApi(event.locals);
   try {
     const [providers, settings, projects, teams, scim] = await Promise.all([

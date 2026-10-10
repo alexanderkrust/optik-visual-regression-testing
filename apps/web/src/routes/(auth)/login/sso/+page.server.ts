@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import { sealSession } from '$lib/session';
 import { apiBase } from '$lib/server/api';
+import { messages } from '$lib/i18n';
 import { COOKIE_NAME, cookieOptions, sessionSecret } from '$lib/server/session-cookie';
 import type { PageServerLoad } from './$types';
 
@@ -17,7 +18,7 @@ export const load: PageServerLoad = async ({ url, cookies, locals }) => {
     headers: { 'Content-Type': 'application/json', ...locals.forwarded },
     body: JSON.stringify({ code }),
   }).catch(() => null);
-  if (!res?.ok) redirect(302, `/login?${new URLSearchParams({ sso_error: 'The sign-in expired — please try again' })}`);
+  if (!res?.ok) redirect(302, `/login?${new URLSearchParams({ sso_error: messages(locals.locale).auth.ssoExpired })}`);
 
   const body = (await res.json()) as {
     accessToken: string;

@@ -1,11 +1,12 @@
 import { error, fail } from '@sveltejs/kit';
 import type { ProjectRole, UserRole } from '@optik/shared';
 import { serverApi } from '$lib/server/api';
+import { messages } from '$lib/i18n';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
   const { user } = await event.parent();
-  if (user.role !== 'admin') error(403, 'Only admins can manage users');
+  if (user.role !== 'admin') error(403, messages(event.locals.locale).users.adminsOnly);
   const api = serverApi(event.locals);
   const [users, invitations, projects] = await Promise.all([
     api.users.list(),

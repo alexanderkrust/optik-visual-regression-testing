@@ -3,20 +3,24 @@
   import type { Snippet } from 'svelte';
   import { page } from '$app/state';
   import { LayoutDashboard, FolderOpen, LogOut, Users, KeyRound, TriangleAlert, ScrollText, LogIn, UsersRound } from 'lucide-svelte';
+  import { provideI18n, useI18n } from '$lib/i18n';
+  import LanguageSwitch from '$lib/components/language-switch.svelte';
   import type { LayoutData } from './$types';
 
   let { children, data }: { children: Snippet; data: LayoutData } = $props();
+  provideI18n(() => data.locale);
+  const { m } = useI18n();
 
   const navItems = $derived([
-    { label: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { label: 'Projects', href: '/projects', icon: FolderOpen },
+    { label: m.nav.dashboard, href: '/', icon: LayoutDashboard },
+    { label: m.nav.projects, href: '/projects', icon: FolderOpen },
     ...(data.user.role === 'admin'
       ? [
-          { label: 'Users', href: '/users', icon: Users },
-          { label: 'Teams', href: '/teams', icon: UsersRound },
-          { label: 'Single sign-on', href: '/sso', icon: LogIn },
-          { label: 'Audit log', href: '/audit', icon: ScrollText },
-          { label: 'License', href: '/license', icon: KeyRound },
+          { label: m.nav.users, href: '/users', icon: Users },
+          { label: m.nav.teams, href: '/teams', icon: UsersRound },
+          { label: m.nav.sso, href: '/sso', icon: LogIn },
+          { label: m.nav.audit, href: '/audit', icon: ScrollText },
+          { label: m.nav.license, href: '/license', icon: KeyRound },
         ]
       : []),
   ]);
@@ -32,7 +36,7 @@
 <a
   href="#main"
   class="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow"
-  >Skip to content</a
+  >{m.nav.skipToContent}</a
 >
 <div class="flex min-h-screen bg-background">
   <aside class="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r bg-background">
@@ -58,7 +62,7 @@
         <span>optik</span>
       </a>
     </div>
-    <nav class="flex flex-1 flex-col gap-1 p-3" aria-label="Main">
+    <nav class="flex flex-1 flex-col gap-1 p-3" aria-label={m.nav.main}>
       {#each navItems as item}
         {@const active = isActive(item.href)}
         <a
@@ -73,13 +77,15 @@
       {/each}
 
       <div class="mt-auto">
+        <LanguageSwitch class="px-3 py-2" />
         {#if data.user}
           <div class="flex items-center justify-between rounded-md px-3 py-2">
             <span class="truncate text-xs text-muted-foreground">{data.user.email}</span>
             <form method="POST" action="/logout">
               <button
                 type="submit"
-                title="Sign out"
+                title={m.nav.signOut}
+                aria-label={m.nav.signOut}
                 class="ml-2 rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               >
                 <LogOut class="h-4 w-4" />
@@ -97,7 +103,7 @@
         class="flex items-start gap-2 border-b border-amber-300 bg-amber-50 px-8 py-2 text-sm text-amber-900 hover:bg-amber-100"
       >
         <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
-        <span>{licenseNotices[0]}{#if licenseNotices.length > 1} (+{licenseNotices.length - 1} more){/if}</span>
+        <span>{licenseNotices[0]}{#if licenseNotices.length > 1} {m.nav.moreNotices(licenseNotices.length - 1)}{/if}</span>
       </a>
     {/if}
     <div class="px-8 py-8">
