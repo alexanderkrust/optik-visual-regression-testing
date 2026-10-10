@@ -113,7 +113,7 @@
         <TableHead>Email</TableHead>
         <TableHead>Role</TableHead>
         <TableHead>Since</TableHead>
-        <TableHead class="w-12"></TableHead>
+        <TableHead class="w-40"></TableHead>
       </TableRow>
     </TableHeader>
     <TableBody>
@@ -121,8 +121,9 @@
         {@const self = user.id === data.user.id}
         <TableRow>
           <TableCell class="font-medium">
-            {user.email}
+            <span class={user.active ? '' : 'text-muted-foreground line-through'}>{user.email}</span>
             {#if self}<Badge variant="outline" class="ml-2 text-xs">you</Badge>{/if}
+            {#if !user.active}<Badge variant="secondary" class="ml-2 text-xs">deactivated</Badge>{/if}
           </TableCell>
           <TableCell>
             <form method="POST" action="?/setRole" use:enhance>
@@ -141,6 +142,19 @@
           <TableCell class="text-sm text-muted-foreground">{date(user.createdAt)}</TableCell>
           <TableCell>
             {#if !self}
+              <div class="flex items-center justify-end gap-1">
+              <form method="POST" action="?/setActive" use:enhance>
+                <input type="hidden" name="id" value={user.id} />
+                <input type="hidden" name="active" value={user.active ? 'false' : 'true'} />
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="sm"
+                  title={user.active ? 'Sign-in and API access end at once; reviews and comments stay' : ''}
+                >
+                  {user.active ? 'Deactivate' : 'Reactivate'}
+                </Button>
+              </form>
               <form method="POST" action="?/removeUser" use:enhance>
                 <input type="hidden" name="id" value={user.id} />
                 <Button
@@ -155,6 +169,7 @@
                   <Trash2 class="h-4 w-4 text-muted-foreground" />
                 </Button>
               </form>
+              </div>
             {/if}
           </TableCell>
         </TableRow>

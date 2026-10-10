@@ -11,6 +11,8 @@ export interface User {
   id: string;
   email: string;
   role: UserRole;
+  /** False when the account was switched off (by an admin or SCIM) */
+  active: boolean;
   createdAt: string;
 }
 
@@ -356,6 +358,10 @@ export type AuditAction =
   | 'auth.login_failed'
   | 'user.role_changed'
   | 'user.removed'
+  | 'user.provisioned'
+  | 'user.updated'
+  | 'user.deactivated'
+  | 'user.reactivated'
   | 'invitation.created'
   | 'invitation.revoked'
   | 'invitation.accepted'
@@ -384,7 +390,9 @@ export type AuditAction =
   | 'team.removed'
   | 'team.member_added'
   | 'team.member_removed'
-  | 'team.project_role_changed';
+  | 'team.project_role_changed'
+  | 'scim.token_created'
+  | 'scim.token_revoked';
 
 export interface AuditActor {
   /** A signed-in user, a project's API token (adapters), or nobody (e.g. a failed sign-in) */
@@ -525,4 +533,20 @@ export interface ProjectTeam {
   name: string;
   role: ProjectRole;
   members: number;
+}
+
+// ------------------------------------------------------------------ SCIM
+
+/** `GET /scim/token`: whether provisioning is set up — the token itself is shown only once. */
+export interface ScimTokenInfo {
+  configured: boolean;
+  /** First characters, to recognise it */
+  prefix: string | null;
+  createdAt: string | null;
+  /** Base URL to enter at the identity provider */
+  endpoint: string;
+}
+
+export interface CreatedScimToken extends ScimTokenInfo {
+  token: string;
 }

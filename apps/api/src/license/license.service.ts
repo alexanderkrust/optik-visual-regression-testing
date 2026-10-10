@@ -130,6 +130,7 @@ export class LicenseService {
   reviewerCount(): Promise<number> {
     return this.prisma.user.count({
       where: {
+        deactivatedAt: null,
         OR: [
           { role: 'admin' },
           { memberships: { some: { role: { in: ['reviewer', 'maintainer'] } } } },
