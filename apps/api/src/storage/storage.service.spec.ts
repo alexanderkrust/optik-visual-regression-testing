@@ -26,6 +26,12 @@ describe('StorageService with local files', () => {
     await expect(storage.get('runs/r1/missing.png')).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('measures images', async () => {
+    await storage.put('runs/r1/s3.png', Buffer.from('12345'));
+    expect(await storage.size('runs/r1/s3.png')).toBe(5);
+    expect(await storage.size('runs/r1/missing.png')).toBeNull();
+  });
+
   it('deletes images and ignores missing ones', async () => {
     await storage.put('runs/r1/s2.png', Buffer.from('x'));
     await storage.delete(['runs/r1/s2.png', 'runs/r1/missing.png']);

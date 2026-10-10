@@ -1,12 +1,14 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { access, mkdir, readFile, rm, writeFile } from 'fs/promises';
+import { access, mkdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { dirname, resolve } from 'path';
 import {
   CreateBucketCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
+  NotFound,
   NoSuchKey,
   PutObjectCommand,
   S3Client,
@@ -21,6 +23,8 @@ interface StorageBackend {
   get(key: string): Promise<Buffer | null>;
   /** Removes the objects; missing ones are ignored. */
   delete(keys: string[]): Promise<void>;
+  /** Bytes of an object, or null if it doesn't exist. */
+  size(key: string): Promise<number | null>;
 }
 
 /**
@@ -68,6 +72,11 @@ export class StorageService implements OnModuleInit {
   async delete(keys: string[]): Promise<void> {
     if (keys.length > 0) await this.backend.delete(keys);
   }
+
+  /** Bytes of a stored image, or null if it doesn't exist. */
+  size(key: string): Promise<number | null> {
+    return this.backend.size(key);
+  }
 }
 
 class FileBackend implements StorageBackend {
@@ -96,6 +105,13 @@ class FileBackend implements StorageBackend {
 
   async delete(keys: string[]) {
     await Promise.all(keys.map((key) => rm(this.path(key), { force: true })));
+  }
+
+  size(key: string) {
+    return stat(this.path(key)).then(
+      (s) => s.size,
+      (err) => (err.code === 'ENOENT' ? null : Promise.reject(err)),
+    );
   }
 
   private path(key: string) {
@@ -157,6 +173,16 @@ class S3Backend implements StorageBackend {
       return Buffer.from(await res.Body!.transformToByteArray());
     } catch (err) {
       if (err instanceof NoSuchKey) return null;
+      throw err;
+    }
+  }
+
+  async size(key: string) {
+    try {
+      const res = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      return res.ContentLength ?? 0;
+    } catch (err) {
+      if (err instanceof NotFound || (err as { name?: string }).name === 'NotFound') return null;
       throw err;
     }
   }

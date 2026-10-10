@@ -12,6 +12,7 @@ import type {
   Project,
   ProjectMember,
   ProjectRole,
+  ProjectStorage,
   UpdateProjectDto,
 } from '@optik/shared';
 import { AccessService, CurrentUser, effectiveRole, rolesOf } from '../access/access.service';
@@ -165,6 +166,45 @@ export class ProjectsService {
     }
   }
 
+  // ------------------------------------------------------------------ storage
+
+  /** Storage a project uses (maintainers). */
+  async storage(user: CurrentUser, slug: string): Promise<ProjectStorage> {
+    const { project } = await this.access.requireProject(user, { slug }, 'maintainer');
+    return this.usage(project);
+  }
+
+  /** Storage of every project, largest first (admins). */
+  async storageOverview(user: CurrentUser): Promise<ProjectStorage[]> {
+    this.access.requireAdmin(user);
+    const projects = await this.prisma.project.findMany({ orderBy: { name: 'asc' } });
+    const usage = await Promise.all(projects.map((p) => this.usage(p)));
+    return usage.sort((a, b) => b.bytes - a.bytes);
+  }
+
+  private async usage(project: { id: string; slug: string; name: string }): Promise<ProjectStorage> {
+    const inProject = { run: { projectId: project.id } };
+    const hasImage = { OR: [{ status: { not: 'unchanged' as const } }, { diffScore: { gt: 0 } }] };
+    const [sums, images, diffs, runs, snapshots, unmeasured] = await Promise.all([
+      this.prisma.snapshot.aggregate({ where: inProject, _sum: { imageBytes: true, diffBytes: true } }),
+      this.prisma.snapshot.count({ where: { ...inProject, imageBytes: { gt: 0 } } }),
+      this.prisma.snapshot.count({ where: { ...inProject, diffBytes: { gt: 0 } } }),
+      this.prisma.run.count({ where: { projectId: project.id } }),
+      this.prisma.snapshot.count({ where: inProject }),
+      this.prisma.snapshot.count({ where: { ...inProject, imageBytes: null, ...hasImage } }),
+    ]);
+    return {
+      projectId: project.id,
+      slug: project.slug,
+      name: project.name,
+      bytes: (sums._sum.imageBytes ?? 0) + (sums._sum.diffBytes ?? 0),
+      images: images + diffs,
+      runs,
+      snapshots,
+      unmeasured,
+    };
+  }
+
   // ------------------------------------------------------------------ members
 
   async members(user: CurrentUser, slug: string): Promise<ProjectMember[]> {
@@ -258,6 +298,7 @@ function toDto(r: ProjectRow, myRole: EffectiveProjectRole): Project {
     ciRepository: r.ciRepository,
     ciApiUrl: r.ciApiUrl,
     ciTokenConfigured: r.ciTokenEncrypted !== null,
+    retentionDays: r.retentionDays,
     myRole,
     createdAt: r.createdAt.toISOString(),
   };
