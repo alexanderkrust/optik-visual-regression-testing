@@ -191,10 +191,10 @@ export class SnapshotsController {
       const user = userId
         ? await this.prisma.user.findUnique({
             where: { id: userId },
-            select: { id: true, email: true, role: true },
+            select: { id: true, email: true, role: true, deactivatedAt: true },
           })
         : null;
-      if (user) {
+      if (user && !user.deactivatedAt) {
         await this.access.requireSnapshot(user, id, 'viewer');
         return;
       }

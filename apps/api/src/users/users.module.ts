@@ -8,5 +8,6 @@ import { UsersService } from './users.service';
   imports: [AuthModule],
   controllers: [UsersController, InvitationsController],
   providers: [UsersService, InvitationsService],
+  exports: [UsersService],
 })
 export class UsersModule {}

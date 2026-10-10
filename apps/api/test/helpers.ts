@@ -63,14 +63,14 @@ export async function call<T = any>(
 ): Promise<Res<T>> {
   const headers: Record<string, string> = { ...init.headers };
   if (init.token) headers.Authorization = `Bearer ${init.token}`;
-  if (init.json !== undefined) headers['Content-Type'] = 'application/json';
+  if (init.json !== undefined) headers['Content-Type'] ??= 'application/json';
   const res = await fetch(url, {
     method: init.method ?? (init.json !== undefined || init.form ? 'POST' : 'GET'),
     headers,
     body: init.form ?? (init.json !== undefined ? JSON.stringify(init.json) : undefined),
   });
   const type = res.headers.get('content-type') ?? '';
-  const body = type.includes('application/json')
+  const body = /\bjson\b|\+json/.test(type)
     ? await res.json()
     : type.startsWith('image/')
       ? Buffer.from(await res.arrayBuffer())

@@ -140,6 +140,60 @@
     </CardContent>
   </Card>
 
+  {#if data.scim}
+    <Card class="mb-6">
+      <CardContent class="p-6 space-y-3">
+        <h2 class="font-semibold">Provisioning (SCIM)</h2>
+        <p class="text-sm text-muted-foreground">
+          Let Entra ID or Okta create, update and deactivate accounts, and keep teams in sync with their groups.
+          Deactivated accounts can't sign in; their reviews stay.
+        </p>
+        <div class="rounded-md bg-muted/50 p-3 text-xs space-y-1">
+          <p class="text-muted-foreground">Tenant / SCIM base URL:</p>
+          <div class="flex items-center gap-2">
+            <code class="flex-1 truncate font-mono select-all">{data.scim.endpoint}</code>
+            <Button type="button" variant="ghost" size="sm" onclick={() => navigator.clipboard.writeText(data.scim!.endpoint)} aria-label="Copy SCIM URL">
+              <Copy class="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+        {#if form && 'scimToken' in form}
+          <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm space-y-2">
+            <p>Secret token — copy it now, it is shown only once:</p>
+            <div class="flex items-center gap-2">
+              <code class="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-xs select-all">{form.scimToken}</code>
+              <Button type="button" variant="outline" size="sm" onclick={() => navigator.clipboard.writeText(String(form.scimToken))}>
+                <Copy class="h-4 w-4" /> Copy
+              </Button>
+            </div>
+          </div>
+        {:else if data.scim.configured}
+          <p class="text-sm">
+            Token <code class="font-mono text-xs">{data.scim.prefix}…</code> created
+            {new Date(data.scim.createdAt ?? '').toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}.
+          </p>
+        {/if}
+        <div class="flex gap-2">
+          <form method="POST" action="?/createScimToken" use:enhance>
+            <Button
+              type="submit"
+              size="sm"
+              variant="outline"
+              onclick={(e: MouseEvent) => {
+                if (data.scim?.configured && !confirm('Create a new token? The current one stops working.')) e.preventDefault();
+              }}>{data.scim.configured ? 'New token' : 'Create token'}</Button
+            >
+          </form>
+          {#if data.scim.configured}
+            <form method="POST" action="?/revokeScimToken" use:enhance>
+              <Button type="submit" size="sm" variant="ghost">Revoke</Button>
+            </form>
+          {/if}
+        </div>
+      </CardContent>
+    </Card>
+  {/if}
+
   {#if data.settings}
     <Card>
       <CardContent class="p-6 space-y-3">

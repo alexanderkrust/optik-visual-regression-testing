@@ -10,16 +10,17 @@ export const load: PageServerLoad = async (event) => {
   if (user.role !== 'admin') error(403, 'Only admins can set up single sign-on');
   const api = serverApi(event.locals);
   try {
-    const [providers, settings, projects, teams] = await Promise.all([
+    const [providers, settings, projects, teams, scim] = await Promise.all([
       api.sso.providers(),
       api.sso.settings(),
       api.projects.list(),
       api.teams.list().catch(() => []),
+      api.scim.token().catch(() => null),
     ]);
-    return { available: true as const, providers, settings, projects, teams };
+    return { available: true as const, providers, settings, projects, teams, scim };
   } catch (e) {
     if (e instanceof Error && e.message.startsWith('403')) {
-      return { available: false as const, providers: [], settings: null, projects: [], teams: [] };
+      return { available: false as const, providers: [], settings: null, projects: [], teams: [], scim: null };
     }
     throw e;
   }
@@ -87,6 +88,14 @@ export const actions: Actions = {
   check: async (event) => {
     const id = String((await event.request.formData()).get('id') ?? '');
     return { check: { id, ...(await serverApi(event.locals).sso.check(id)) } };
+  },
+  createScimToken: async (event) => {
+    // Shown once — only its hash is stored
+    return { scimToken: (await serverApi(event.locals).scim.createToken()).token };
+  },
+  revokeScimToken: async (event) => {
+    await serverApi(event.locals).scim.revokeToken();
+    return { scimRevoked: true };
   },
   settings: async (event) => {
     const passwordLogin = String((await event.request.formData()).get('passwordLogin')) as PasswordLogin;

@@ -53,6 +53,15 @@ export const actions: Actions = {
     }
   },
 
+  setActive: async (event) => {
+    const data = await event.request.formData();
+    try {
+      await serverApi(event.locals).users.setActive(String(data.get('id')), data.get('active') === 'true');
+    } catch (e) {
+      return fail(400, { userError: message(e) });
+    }
+  },
+
   removeUser: async (event) => {
     const data = await event.request.formData();
     try {
