@@ -122,6 +122,19 @@ export class SsoLoginController {
     res.header('Set-Cookie', clearCookie).header('Cache-Control', 'no-store').redirect(302, redirect);
   }
 
+  @Post(':id/callback')
+  @ApiOperation({ summary: 'Where a SAML provider posts its response (assertion consumer service)' })
+  async samlCallback(@Param('id') id: string, @Body() body: Record<string, string>, @Req() req: any, @Res() res: any) {
+    const { redirect, clearCookie } = await this.sso.samlCallback(id, body, requestInfo(req));
+    res.header('Set-Cookie', clearCookie).header('Cache-Control', 'no-store').redirect(303, redirect);
+  }
+
+  @Get(':id/metadata')
+  @ApiOperation({ summary: "optik's SAML service provider metadata" })
+  async metadata(@Param('id') id: string, @Req() req: any, @Res() res: any) {
+    res.header('Content-Type', 'application/samlmetadata+xml').send(await this.sso.metadata(id, requestInfo(req)));
+  }
+
   @Post('exchange')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Trade the one-time code for a session (web UI server)' })
