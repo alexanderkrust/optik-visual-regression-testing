@@ -1,8 +1,7 @@
 import { resolve } from "path"
 import { test as base, expect } from "@playwright/test"
-import type { SubmittedSnapshot } from "@optik/shared"
-import { authFetch } from "./auth.js"
-import { apiUrl, serverUrl } from "./server.js"
+import { shouldFail } from "@optik/core"
+import { client } from "./client.js"
 
 export { expect } from "@playwright/test"
 
@@ -86,39 +85,15 @@ export const test = base.extend<{ optik: OptikFixture }>({
     await use({
       snapshot: async (name: string) => {
         const screenshot = await page.screenshot({ fullPage: true })
-
-        const form = new FormData()
-        form.append("runId", runId)
-        form.append("name", name)
-        form.append(
-          "file",
-          new Blob([new Uint8Array(screenshot)], { type: "image/png" }),
-          `${name}.png`,
-        )
-
-        const res = await authFetch(apiUrl("/snapshots"), token, {
-          method: "POST",
-          body: form,
-        })
-
-        if (!res.ok) {
-          throw new Error(
-            `Optik: failed to submit snapshot "${name}": ${res.status} ${res.statusText}`,
-          )
-        }
-
-        const result = (await res.json()) as SubmittedSnapshot
+        const optik = client()
+        const result = await optik.submit(runId, name, screenshot)
         // The adapter option wins, then the server's decision (project setting)
         const override = process.env._OPTIK_FAIL_ON_CHANGES
-        const fail =
-          override !== undefined
-            ? override === "true" && result.status === "pending"
-            : (result.failTest ?? result.status === "pending")
-        if (fail) {
+        if (shouldFail(result, override === undefined ? undefined : override === "true")) {
           throw new Error(
             `Visual snapshot "${name}" differs from the approved baseline ` +
               `(${((result.diffScore ?? 0) * 100).toFixed(2)}% of pixels changed).\n` +
-              `Review it: ${serverUrl()}${result.reviewPath}`,
+              `Review it: ${optik.url(result.reviewPath)}`,
           )
         }
       },
