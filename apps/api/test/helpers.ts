@@ -35,7 +35,7 @@ export async function startApp(
 /** Removes all data — called before each test. */
 export async function resetDatabase(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE snapshots, runs, api_tokens, projects, refresh_tokens, users, instance_settings, audit_events, identity_providers, sso_login_codes, teams CASCADE',
+    'TRUNCATE snapshots, runs, api_tokens, projects, refresh_tokens, users, instance_settings, audit_events, identity_providers, sso_login_codes, saml_requests, teams CASCADE',
   );
 }
 
