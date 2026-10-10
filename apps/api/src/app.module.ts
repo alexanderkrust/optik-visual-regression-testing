@@ -18,6 +18,7 @@ import { AuditModule } from './audit/audit.module';
 import { AuditLogModule } from './ee/audit/audit-log.module';
 import { SsoModule } from './ee/sso/sso.module';
 import { TeamsModule } from './ee/teams/teams.module';
+import { ScimModule } from './ee/scim/scim.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { TeamsModule } from './ee/teams/teams.module';
     AuditLogModule,
     SsoModule,
     TeamsModule,
+    ScimModule,
   ],
   controllers: [AppController],
 })

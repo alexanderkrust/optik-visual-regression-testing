@@ -369,6 +369,7 @@ export class SsoService implements OnModuleInit {
       include: { user: true },
     });
     let user = identity?.user ?? (await this.prisma.user.findUnique({ where: { email } }));
+    if (user?.deactivatedAt) throw new Error(`The optik account of ${email} is deactivated`);
     if (!user) {
       if (!provider.createUsers) throw new Error(`There is no optik account for ${email} — ask an admin to invite you`);
       user = await this.prisma.user.create({ data: { email, password: null, role: 'member' } });

@@ -97,6 +97,30 @@ export class TeamsService {
     return this.get(id);
   }
 
+  /** SCIM: adds users (by ID) to a team; unknown IDs are ignored. */
+  async addMembersById(teamId: string, userIds: string[], details: Record<string, unknown> = {}) {
+    const team = await this.find(teamId);
+    const users = await this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } });
+    for (const user of users) await this.join(team, user, details);
+  }
+
+  /** SCIM: removes users (by ID) from a team; all members when `userIds` is null. */
+  async removeMembersById(teamId: string, userIds: string[] | null, details: Record<string, unknown> = {}) {
+    const team = await this.find(teamId);
+    const members = await this.prisma.teamMember.findMany({
+      where: { teamId, ...(userIds ? { userId: { in: userIds } } : {}) },
+      select: { userId: true },
+    });
+    for (const member of members) await this.leave(team, member.userId, details);
+  }
+
+  /** SCIM: makes exactly these users the team's members. */
+  async setMembersById(teamId: string, userIds: string[], details: Record<string, unknown> = {}) {
+    const current = await this.prisma.teamMember.findMany({ where: { teamId }, select: { userId: true } });
+    await this.removeMembersById(teamId, current.map((m) => m.userId).filter((id) => !userIds.includes(id)), details);
+    await this.addMembersById(teamId, userIds, details);
+  }
+
   /** Teams with access to a project — for its members page. */
   async forProject(projectId: string): Promise<ProjectTeam[]> {
     const rows = await this.prisma.teamProject.findMany({
