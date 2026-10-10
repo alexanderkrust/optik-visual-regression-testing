@@ -157,6 +157,8 @@ export class SnapshotsService {
         imageHash,
         baselineId: baseline?.id ?? null,
         autoApprovedFromId: approvedTwin?.id ?? null,
+        imageBytes: status !== 'unchanged' || diffImage ? image.length : null,
+        diffBytes: diffImage?.length ?? null,
       },
     });
 
@@ -329,7 +331,7 @@ export class SnapshotsService {
 
     await this.prisma.snapshot.update({
       where: { id: change.id },
-      data: { status: 'unchanged', diffScore: diff.diffScore },
+      data: { status: 'unchanged', diffScore: diff.diffScore, diffBytes: diff.diffImage.length },
     });
     await this.storage.put(diffKey(change.runId, change.id), Buffer.from(diff.diffImage));
     await this.commitStatus.reportRun(change.runId);

@@ -234,6 +234,12 @@ Admins add identity providers under *Single sign-on*. optik speaks **OpenID Conn
 
 Accounts are created on the first sign-in (role *member*) and linked to the provider's subject ID, so they survive e-mail changes; an existing account with the same e-mail address is linked. Sign-ins with an e-mail address the provider marks as unverified are refused. Behind a reverse proxy, make sure it passes `Host` / `X-Forwarded-Host` and `X-Forwarded-Proto`, or set `PUBLIC_URL` — the redirect URI is built from them.
 
+### Storage and retention
+
+Every project shows under *Settings → Storage and retention* how much its screenshots and diff images take; admins see it for all projects on the project list. optik records image sizes as it stores them (older images are measured by a daily job).
+
+**Retention (Enterprise):** set how many days runs are kept. Every day — or with *Clean up now* — older runs and their images are removed, but baselines always stay: the newest accepted snapshot of each name per suite and branch, and every baseline a newer run compares against. Reviews keep working exactly as before; each clean-up appears in the audit log. With several instances, only one runs the daily job at a time.
+
 ### Provisioning with SCIM (Enterprise)
 
 Entra ID, Okta and other identity providers can manage optik's accounts over SCIM 2.0: under *Single sign-on → Provisioning (SCIM)*, create a token and enter it at the provider together with the SCIM base URL (`https://<optik>/api/scim/v2`).
@@ -443,6 +449,15 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/sso/providers/:id/check` | Read the discovery document (admin) |
 | GET/PUT | `/api/sso/settings` | `passwordLogin`: `all` or `admins` (admin) |
 
+### Storage and retention
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/projects/:slug/storage` | Storage a project uses (maintainer) |
+| GET | `/api/storage` | Storage per project, largest first (admin) |
+| PUT | `/api/projects/:slug/retention` | Keep runs for `{ "days": 90 }` (`null` = forever; Enterprise, maintainer) |
+| POST | `/api/projects/:slug/retention/run` | Clean up now (Enterprise, maintainer) |
+
 ### SCIM 2.0 (Enterprise; SCIM token)
 
 `/api/scim/v2`: `ServiceProviderConfig`, `ResourceTypes`, `Users` and `Groups` (GET with `filter=<attribute> eq "<value>"`, `startIndex`, `count`; POST; PUT; PATCH; DELETE). Admins manage the token with `GET/POST/DELETE /api/scim/token`.
@@ -559,7 +574,7 @@ optik is open source under the [Apache License 2.0](LICENSE). Enterprise feature
 |---|---|---|
 | Community | 5 | — |
 | Team | as licensed | — |
-| Enterprise | as licensed | audit log, single sign-on (OIDC, SAML), SCIM provisioning, teams; retention policies (in development) |
+| Enterprise | as licensed | audit log, single sign-on (OIDC, SAML), SCIM provisioning, teams, retention policies |
 
 *Reviewers* are the people who can accept or reject changes: admins, and maintainers and reviewers of any project. Developers who only run tests, and viewers, don't count.
 

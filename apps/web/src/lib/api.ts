@@ -6,6 +6,8 @@ import type {
   ProjectTeam,
   SaveTeamDto,
   ScimTokenInfo,
+  ProjectStorage,
+  RetentionResult,
   CreatedScimToken,
   Team,
   SaveIdentityProviderDto,
@@ -78,6 +80,15 @@ export function createApi(
       /** Query string as the API takes it (q, action, project, from, to, before, limit) */
       list: (query: string) => request<AuditEventPage>(`/audit-events?${query}`),
       verify: () => request<AuditVerification>('/audit-events/verify'),
+    },
+    storage: {
+      overview: () => request<ProjectStorage[]>('/storage'),
+      project: (slug: string) => request<ProjectStorage>(`/projects/${slug}/storage`),
+    },
+    retention: {
+      set: (slug: string, days: number | null) =>
+        request<Project>(`/projects/${slug}/retention`, { method: 'PUT', body: JSON.stringify({ days }) }),
+      run: (slug: string) => request<RetentionResult>(`/projects/${slug}/retention/run`, { method: 'POST' }),
     },
     teams: {
       list: () => request<Team[]>('/teams'),

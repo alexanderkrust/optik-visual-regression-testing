@@ -31,6 +31,9 @@ model Project {
   ciRepository     String?     @map("ci_repository")
   ciApiUrl         String?     @map("ci_api_url")
   ciTokenEncrypted String?     @map("ci_token_encrypted")
+  /// Retention (Enterprise): runs older than this many days are cleaned up,
+  /// baselines are always kept. Null keeps everything.
+  retentionDays    Int?        @map("retention_days")
   createdAt DateTime   @default(now()) @map("created_at")
   runs      Run[]
   tokens    ApiToken[]
@@ -92,6 +95,7 @@ model Run {
   snapshots     Snapshot[]
 
   @@index([projectId, suite, branch, createdAt])
+  @@index([projectId, updatedAt])
   @@map("runs")
 }
 
@@ -115,6 +119,9 @@ model Snapshot {
   diffScore  Float?         @map("diff_score")
   /// SHA-256 of the decoded pixels — finds identical, already approved images
   imageHash  String?        @map("image_hash")
+  /// Bytes of the stored screenshot and diff image (null: none, or not measured yet)
+  imageBytes Int?           @map("image_bytes")
+  diffBytes  Int?           @map("diff_bytes")
   /// Set when the snapshot was accepted automatically because an identical
   /// image was already approved (e.g. on the branch a squash merge came from)
   autoApprovedFromId String? @map("auto_approved_from_id")
