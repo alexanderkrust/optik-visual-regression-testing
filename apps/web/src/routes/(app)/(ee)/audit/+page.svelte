@@ -64,6 +64,7 @@
     'team.project_role_changed': "Changed team's project role",
     'scim.token_created': 'Created SCIM token',
     'scim.token_revoked': 'Revoked SCIM token',
+    'retention.applied': 'Cleaned up old runs',
   };
 
   const GROUPS = [
@@ -80,6 +81,7 @@
     ['team.', 'Teams'],
     ['sso.', 'Single sign-on'],
     ['scim.', 'SCIM'],
+    ['retention.', 'Retention'],
     ['license.', 'License'],
   ] as const;
 

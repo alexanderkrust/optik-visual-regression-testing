@@ -5,11 +5,15 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async (event) => {
   const api = serverApi(event.locals);
   try {
-    const projects = await api.projects.list();
-    return { projects };
+    const { user } = await event.parent();
+    const [projects, storage] = await Promise.all([
+      api.projects.list(),
+      user.role === 'admin' ? api.storage.overview().catch(() => []) : Promise.resolve([]),
+    ]);
+    return { projects, storage };
   } catch (e) {
     console.error('[load] Failed to fetch projects:', e);
-    return { projects: [] as Awaited<ReturnType<typeof api.projects.list>> };
+    return { projects: [] as Awaited<ReturnType<typeof api.projects.list>>, storage: [] };
   }
 };
 

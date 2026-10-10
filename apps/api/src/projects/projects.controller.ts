@@ -30,6 +30,12 @@ export class ProjectsController {
     return this.projectsService.findOne(user, slug);
   }
 
+  @Get(':slug/storage')
+  @ApiOperation({ summary: 'Storage the project uses (maintainer)' })
+  storage(@User() user: CurrentUser, @Param('slug') slug: string) {
+    return this.projectsService.storage(user, slug);
+  }
+
   @Patch(':slug')
   @ApiOperation({ summary: 'Update project settings (maintainer)' })
   update(@User() user: CurrentUser, @Param('slug') slug: string, @Body() dto: UpdateProjectDto) {
@@ -53,5 +59,18 @@ export class ProjectsController {
   @ApiOperation({ summary: 'Remove a project member (maintainer)' })
   async removeMember(@User() user: CurrentUser, @Param('slug') slug: string, @Param('userId') userId: string) {
     await this.projectsService.removeMember(user, slug, userId);
+  }
+}
+
+@ApiTags('projects')
+@Controller('storage')
+@UseGuards(JwtAuthGuard)
+export class StorageController {
+  constructor(private readonly projectsService: ProjectsService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Storage per project, largest first (admin)' })
+  overview(@User() user: CurrentUser) {
+    return this.projectsService.storageOverview(user);
   }
 }
