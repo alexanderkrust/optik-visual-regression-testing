@@ -29,6 +29,11 @@
   }
 </script>
 
+<a
+  href="#main"
+  class="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow"
+  >Skip to content</a
+>
 <div class="flex min-h-screen bg-background">
   <aside class="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r bg-background">
     <div class="flex h-14 items-center border-b px-5">
@@ -53,7 +58,7 @@
         <span>optik</span>
       </a>
     </div>
-    <nav class="flex flex-1 flex-col gap-1 p-3">
+    <nav class="flex flex-1 flex-col gap-1 p-3" aria-label="Main">
       {#each navItems as item}
         {@const active = isActive(item.href)}
         <a
@@ -85,7 +90,7 @@
       </div>
     </nav>
   </aside>
-  <main class="flex-1 min-w-0 pl-60">
+  <main id="main" tabindex="-1" class="flex-1 min-w-0 pl-60 focus:outline-none">
     {#if licenseNotices.length > 0 && !page.url.pathname.startsWith('/license')}
       <a
         href="/license"

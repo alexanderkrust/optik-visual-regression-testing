@@ -291,7 +291,7 @@
 
 <svelte:head><title>Run {data.runId.slice(0, 8)} — optik</title></svelte:head>
 
-<nav class="flex items-center gap-1.5 text-sm text-muted-foreground mb-6">
+<nav class="flex items-center gap-1.5 text-sm text-muted-foreground mb-6" aria-label="Breadcrumb">
   <a href="/" class="hover:text-foreground transition-colors">Projects</a>
   <ChevronRight class="h-4 w-4" />
   <a href="/{data.projectSlug}" class="hover:text-foreground transition-colors">{data.projectSlug}</a>
