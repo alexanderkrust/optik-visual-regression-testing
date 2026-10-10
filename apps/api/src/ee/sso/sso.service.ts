@@ -28,9 +28,12 @@ import { AuthService, SessionTokens } from '../../auth/auth.service';
 import { LoginPolicy } from '../../auth/login-policy';
 import { LicenseService } from '../../license/license.service';
 import { authorizationUrl, completeSignIn, discover, randomToken } from './oidc';
+import { describeCertificate, profileClaims, samlClient, SamlRequestStore, spMetadata, SpUrls } from './saml';
 import { TeamsService } from '../teams/teams.service';
 
 export const STATE_COOKIE = 'optik_sso';
+/** Ties a SAML response to the browser that started the sign-in */
+export const SAML_COOKIE = 'optik_saml';
 const STATE_TTL_S = 600;
 const LOGIN_CODE_TTL_MS = 60_000;
 const PASSWORD_SETTING = 'sso.password_login';
@@ -145,6 +148,7 @@ export class SsoService implements OnModuleInit {
   /** Reads the provider's discovery document — to check the issuer URL. */
   async check(id: string): Promise<{ ok: boolean; message: string }> {
     const row = await this.find(id);
+    if (row.protocol === 'saml') return describeCertificate(row.samlCertificate ?? '');
     try {
       const d = await discover(row.issuer, { fresh: true });
       return { ok: true, message: `Found ${d.issuer} (sign-in at ${new URL(d.authorization_endpoint).host})` };
@@ -190,6 +194,7 @@ export class SsoService implements OnModuleInit {
   async start(id: string, returnTo: string | undefined, req: RequestInfo): Promise<{ url: string; cookie: string }> {
     await this.license.require('sso');
     const provider = await this.enabledProvider(id);
+    if (provider.protocol === 'saml') return this.startSaml(provider, returnTo, req);
     const d = await discover(provider.issuer).catch((err) => {
       throw new BadRequestException(`${provider.name} can't be reached: ${(err as Error).message}`);
     });
@@ -236,18 +241,103 @@ export class SsoService implements OnModuleInit {
         nonce: state.nonce,
       });
       const user = await this.signIn(provider, claims);
-
-      const code = randomToken();
-      await this.prisma.ssoLoginCode.create({
-        data: { codeHash: hash(code), userId: user.id, expiresAt: new Date(Date.now() + LOGIN_CODE_TTL_MS) },
-      });
-      const params = new URLSearchParams({ code, returnTo: state.returnTo });
-      return { redirect: `${base}/login/sso?${params}`, clearCookie };
+      return { redirect: await this.handOver(user.id, state.returnTo, base), clearCookie };
     } catch (err) {
-      const message = (err as Error).message;
-      this.logger.warn(`Single sign-on with provider ${id} failed: ${message}`);
-      return { redirect: `${base}/login?${new URLSearchParams({ sso_error: message })}`, clearCookie };
+      return { redirect: this.failed(id, err, base), clearCookie };
     }
+  }
+
+  // ---------------------------------------------------------------------- SAML
+
+  private async startSaml(provider: ProviderRow, returnTo: string | undefined, req: RequestInfo) {
+    const store = new SamlRequestStore(this.prisma);
+    const saml = samlClient(provider, this.spUrls(provider.id, req), store);
+    // The request ID is the RelayState (at most 80 bytes); the rest stays here
+    const url = await saml.getAuthorizeUrlAsync('', undefined, {});
+    const requestId = store.saved!;
+    await this.prisma.samlRequest.update({ where: { id: requestId }, data: { returnTo: safePath(returnTo) } });
+    const withRelayState = new URL(url);
+    withRelayState.searchParams.set('RelayState', requestId);
+    return { url: withRelayState.toString(), cookie: this.samlCookie(requestId, req) };
+  }
+
+  /**
+   * The provider posts the SAML response here (HTTP-POST binding). It must be
+   * signed with the configured certificate, meant for optik, recent, and
+   * answer a request this browser started.
+   */
+  async samlCallback(
+    id: string,
+    body: { SAMLResponse?: string; RelayState?: string },
+    req: RequestInfo,
+  ): Promise<{ redirect: string; clearCookie: string }> {
+    const base = this.baseUrl(req);
+    const clearCookie = this.samlCookie('', req, 0);
+    try {
+      await this.license.require('sso');
+      const provider = await this.enabledProvider(id);
+      if (provider.protocol !== 'saml' || !body?.SAMLResponse) throw new Error('This is not a SAML sign-in');
+
+      const request = body.RelayState
+        ? await this.prisma.samlRequest.findUnique({ where: { id: body.RelayState } })
+        : null;
+      if (!request) throw new Error('The sign-in expired or was not started here — please try again');
+      const cookie = readCookie(req.cookieHeader, SAML_COOKIE);
+      // Browsers only send the cookie with the provider's POST over HTTPS (SameSite=None)
+      if ((cookie || base.startsWith('https:')) && cookie !== request.id) {
+        throw new Error('The sign-in was started in another browser — please try again');
+      }
+
+      const saml = samlClient(provider, this.spUrls(id, req), new SamlRequestStore(this.prisma));
+      const { profile } = await saml.validatePostResponseAsync({ SAMLResponse: body.SAMLResponse }).catch((err) => {
+        throw new Error(`The SAML response is not valid: ${(err as Error).message}`);
+      });
+      if (!profile) throw new Error('The provider sent no assertion');
+      // node-saml checks the signature, not who issued the assertion
+      if (profile.issuer !== provider.issuer) {
+        throw new Error(`The assertion was issued by "${profile.issuer}", not by "${provider.issuer}"`);
+      }
+
+      const claims = profileClaims(profile, provider);
+      const user = await this.signIn(provider, claims);
+      return { redirect: await this.handOver(user.id, request.returnTo, base), clearCookie };
+    } catch (err) {
+      return { redirect: this.failed(id, err, base), clearCookie };
+    }
+  }
+
+  /** optik's SAML metadata, to import at the identity provider. */
+  async metadata(id: string, req: RequestInfo): Promise<string> {
+    const provider = await this.find(id);
+    if (provider.protocol !== 'saml') throw new NotFoundException('This provider does not use SAML');
+    return spMetadata(this.spUrls(id, req));
+  }
+
+  private spUrls(id: string, req: RequestInfo): SpUrls {
+    return { entityId: `${this.baseUrl(req)}/api/auth/sso/${id}`, acsUrl: this.redirectUri(id, req) };
+  }
+
+  private samlCookie(value: string, req: RequestInfo, maxAge = Math.round(STATE_TTL_S)) {
+    const https = this.baseUrl(req).startsWith('https:');
+    const sameSite = https ? 'SameSite=None; Secure' : 'SameSite=Lax';
+    return `${SAML_COOKIE}=${value}; Path=/api/auth/sso; HttpOnly; ${sameSite}; Max-Age=${maxAge}`;
+  }
+
+  // ------------------------------------------------------------ both protocols
+
+  /** Sends the browser to the web UI with a one-time code for the session. */
+  private async handOver(userId: string, returnTo: string, base: string): Promise<string> {
+    const code = randomToken();
+    await this.prisma.ssoLoginCode.create({
+      data: { codeHash: hash(code), userId, expiresAt: new Date(Date.now() + LOGIN_CODE_TTL_MS) },
+    });
+    return `${base}/login/sso?${new URLSearchParams({ code, returnTo })}`;
+  }
+
+  private failed(id: string, err: unknown, base: string): string {
+    const message = (err as Error).message;
+    this.logger.warn(`Single sign-on with provider ${id} failed: ${message}`);
+    return `${base}/login?${new URLSearchParams({ sso_error: message })}`;
   }
 
   /** Trades the one-time code for a session (used by the web UI's server). */
@@ -384,7 +474,7 @@ export class SsoService implements OnModuleInit {
   private client(provider: ProviderRow, req: RequestInfo) {
     return {
       issuer: provider.issuer,
-      clientId: provider.clientId,
+      clientId: provider.clientId ?? '',
       clientSecret: provider.clientSecretEncrypted ? this.secrets.decrypt(provider.clientSecretEncrypted) : null,
       scopes: provider.scopes,
       redirectUri: this.redirectUri(provider.id, req),
@@ -406,11 +496,7 @@ export class SsoService implements OnModuleInit {
   }
 
   private readState(cookieHeader: string | undefined): SignInState | null {
-    const raw = cookieHeader
-      ?.split(';')
-      .map((c) => c.trim())
-      .find((c) => c.startsWith(`${STATE_COOKIE}=`))
-      ?.slice(STATE_COOKIE.length + 1);
+    const raw = readCookie(cookieHeader, STATE_COOKIE);
     const json = raw ? this.secrets.decrypt(raw) : null;
     try {
       return json ? (JSON.parse(json) as SignInState) : null;
@@ -423,6 +509,7 @@ export class SsoService implements OnModuleInit {
     return {
       id: r.id,
       name: r.name,
+      protocol: r.protocol,
       issuer: r.issuer,
       clientId: r.clientId,
       clientSecretConfigured: r.clientSecretEncrypted !== null,
@@ -432,12 +519,27 @@ export class SsoService implements OnModuleInit {
       allowedDomains: r.allowedDomains,
       createUsers: r.createUsers,
       enabled: r.enabled,
+      samlEntryPoint: r.samlEntryPoint,
+      samlCertificate: r.samlCertificate,
+      emailAttribute: r.emailAttribute,
       redirectUri: this.redirectUri(r.id, req),
+      spEntityId: this.spUrls(r.id, req).entityId,
+      metadataUrl: `${this.baseUrl(req)}/api/auth/sso/${r.id}/metadata`,
     };
   }
 }
 
 const hash = (code: string) => createHash('sha256').update(code).digest('hex');
+
+function readCookie(header: string | undefined, name: string): string | null {
+  return (
+    header
+      ?.split(';')
+      .map((c) => c.trim())
+      .find((c) => c.startsWith(`${name}=`))
+      ?.slice(name.length + 1) || null
+  );
+}
 
 /** Only paths inside optik — never a redirect to another site. */
 function safePath(value: string | undefined): string {
@@ -450,19 +552,51 @@ function groupsOf(value: unknown): string[] {
   return typeof value === 'string' ? [value] : [];
 }
 
+/** A certificate in PEM form; bare base64 (as some providers show it) is wrapped. */
+function pem(value: string): string {
+  const body = value.replace(/-----(BEGIN|END) CERTIFICATE-----/g, '').replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/]+=*$/.test(body)) throw new BadRequestException('samlCertificate must be a PEM certificate');
+  const certificate = `-----BEGIN CERTIFICATE-----\n${body.match(/.{1,64}/g)!.join('\n')}\n-----END CERTIFICATE-----`;
+  // An expired certificate can still be saved (and replaced later); garbage can't
+  if (describeCertificate(certificate).message.includes('not a valid')) {
+    throw new BadRequestException('samlCertificate is not a valid certificate');
+  }
+  return certificate;
+}
+
 function validate(dto: SaveIdentityProviderDto, current: ProviderRow | null) {
   const text = (v: unknown, name: string, max = 500) => {
     if (typeof v !== 'string' || !v.trim() || v.length > max) throw new BadRequestException(`${name} is required`);
     return v.trim();
   };
-  const issuer = text(dto?.issuer, 'issuer').replace(/\/+$/, '');
-  try {
-    if (!['http:', 'https:'].includes(new URL(issuer).protocol)) throw new Error();
-  } catch {
-    throw new BadRequestException('issuer must be an http(s) URL');
+  const protocol = current?.protocol ?? dto?.protocol ?? 'oidc';
+  if (protocol !== 'oidc' && protocol !== 'saml') throw new BadRequestException('protocol must be "oidc" or "saml"');
+  if (current && dto?.protocol && dto.protocol !== current.protocol) {
+    throw new BadRequestException('The protocol of a provider cannot change — add a new one');
   }
+  const httpUrl = (value: string, name: string) => {
+    try {
+      if (['http:', 'https:'].includes(new URL(value).protocol)) return value;
+    } catch {
+      // fall through
+    }
+    throw new BadRequestException(`${name} must be an http(s) URL`);
+  };
+
+  // SAML entity IDs may be URNs; OIDC issuers are URLs
+  let issuer = text(dto?.issuer, protocol === 'saml' ? 'The entity ID of the provider' : 'issuer');
+  if (protocol === 'oidc') issuer = httpUrl(issuer.replace(/\/+$/, ''), 'issuer');
   const scopes = (dto.scopes ?? current?.scopes ?? 'openid email profile').trim();
-  if (!scopes.split(/\s+/).includes('openid')) throw new BadRequestException('scopes must include "openid"');
+  if (protocol === 'oidc' && !scopes.split(/\s+/).includes('openid')) {
+    throw new BadRequestException('scopes must include "openid"');
+  }
+  const saml =
+    protocol === 'saml'
+      ? {
+          samlEntryPoint: httpUrl(text(dto.samlEntryPoint ?? current?.samlEntryPoint, 'samlEntryPoint'), 'samlEntryPoint'),
+          samlCertificate: pem(text(dto.samlCertificate ?? current?.samlCertificate, 'samlCertificate', 20_000)),
+        }
+      : { samlEntryPoint: null, samlCertificate: null };
 
   const roleMappings = (dto.roleMappings ?? (current?.roleMappings as unknown as SsoRoleMapping[]) ?? []).map((m) => {
     const group = typeof m?.group === 'string' ? m.group.trim() : '';
@@ -490,9 +624,12 @@ function validate(dto: SaveIdentityProviderDto, current: ProviderRow | null) {
 
   return {
     name: text(dto.name, 'name', 100),
+    protocol,
     issuer,
-    clientId: text(dto.clientId, 'clientId'),
+    clientId: protocol === 'oidc' ? text(dto.clientId, 'clientId') : null,
     scopes,
+    ...saml,
+    emailAttribute: (dto.emailAttribute ?? current?.emailAttribute ?? 'email').trim() || 'email',
     groupsClaim: (dto.groupsClaim ?? current?.groupsClaim ?? 'groups').trim() || 'groups',
     roleMappings: roleMappings as unknown as Prisma.InputJsonValue & SsoRoleMapping[],
     allowedDomains,
