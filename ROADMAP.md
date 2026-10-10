@@ -103,7 +103,7 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [x] Teams (groups of users with project roles), mapped from IdP groups; team access keeps working without the license
 - [x] Immutable, searchable, exportable audit log (approvals, rejections, tokens, permissions, sign-ins): append-only table with hash chain and integrity check, CSV / JSON Lines export — first code under `ee/` (optik Enterprise License, draft pending legal review)
 - [x] Retention policies for runs and images (baselines are always kept), storage usage per project; daily maintenance job with a database lease (one instance at a time)
-- [ ] Observability: Prometheus metrics, structured JSON logs, OpenTelemetry tracing
+- [x] Observability: Prometheus metrics (optional token, ServiceMonitor), structured JSON logs with request IDs, OpenTelemetry tracing (OTLP) — in the open core
 - [ ] High availability: stateless API behind a load balancer; backup & restore guide
 - [x] License management in the admin UI (reviewer count, update period), `OPTIK_LICENSE`, notices for admins instead of lock-outs
 - [ ] No telemetry by default; documented data locations; accessible UI; German and English

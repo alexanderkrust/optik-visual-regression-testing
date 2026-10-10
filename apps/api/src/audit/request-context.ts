@@ -5,6 +5,8 @@ import type { CurrentUser } from '../access/access.service';
 
 /** Who made the current request, and from where — for the audit log. */
 export interface RequestContext {
+  /** X-Request-Id: the client's (if sensible) or a generated one */
+  requestId: string | null;
   ip: string | null;
   userAgent: string | null;
   user: CurrentUser | null;
@@ -25,6 +27,7 @@ export class RequestContextInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest();
     const store: RequestContext = {
+      requestId: req?.requestId ?? null,
       ip: req?.ip ?? null,
       userAgent: req?.headers?.['user-agent']?.slice(0, 500) ?? null,
       user: req?.user ?? null,
