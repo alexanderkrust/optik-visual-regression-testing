@@ -16,6 +16,8 @@ import { PrismaService } from '../database/prisma.service';
 import { LoginLimiter } from './login-limiter';
 import { AuditTrail } from '../audit/audit-trail';
 import { LoginPolicy } from './login-policy';
+import { DatabaseFailureStore } from './login-failure-store';
+import { MaintenanceService } from '../maintenance/maintenance.service';
 
 // Compared against when the email is unknown, so the response time doesn't
 // reveal which accounts exist.
@@ -59,11 +61,18 @@ export class AuthService implements OnModuleInit {
     private readonly config: ConfigService,
     private readonly audit: AuditTrail,
     private readonly policy: LoginPolicy,
+    maintenance: MaintenanceService,
   ) {
-    this.loginLimiter = new LoginLimiter(
-      Number(config.get('LOGIN_MAX_FAILURES') ?? 10),
-      Number(config.get('LOGIN_LOCKOUT_MINUTES') ?? 15) * 60_000,
-    );
+    const windowMs = Number(config.get('LOGIN_LOCKOUT_MINUTES') ?? 15) * 60_000;
+    const store = new DatabaseFailureStore(prisma);
+    this.loginLimiter = new LoginLimiter(Number(config.get('LOGIN_MAX_FAILURES') ?? 10), windowMs, store);
+    maintenance.register({
+      name: 'sign-in failures',
+      run: async () => {
+        const pruned = await store.prune(Date.now() - windowMs);
+        return pruned ? { pruned } : undefined;
+      },
+    });
   }
 
   async onModuleInit() {
@@ -123,7 +132,7 @@ export class AuthService implements OnModuleInit {
     password: string,
   ): Promise<SessionTokens> {
     email = email?.trim() ?? '';
-    const retryAfter = this.loginLimiter.retryAfter(email);
+    const retryAfter = await this.loginLimiter.retryAfter(email);
     if (retryAfter > 0) {
       await this.loginFailed(email, 'blocked');
       throw new HttpException(
@@ -142,12 +151,12 @@ export class AuthService implements OnModuleInit {
 
     const valid = await bcrypt.compare(password ?? '', user?.password ?? DUMMY_HASH);
     if (!user || !valid) {
-      this.loginLimiter.recordFailure(email);
+      await this.loginLimiter.recordFailure(email);
       await this.loginFailed(email, user ? 'wrong_password' : 'unknown_user');
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    this.loginLimiter.reset(email);
+    await this.loginLimiter.reset(email);
     if (user.deactivatedAt) {
       await this.loginFailed(email, 'deactivated');
       throw new ForbiddenException('This account is deactivated');

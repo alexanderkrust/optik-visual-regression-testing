@@ -1,6 +1,6 @@
 {{- $localStorage := not .Values.storage.s3.enabled }}
-{{- if and $localStorage (gt (int .Values.replicaCount) 1) }}
-{{- fail "replicaCount > 1 requires S3 storage (storage.s3.enabled) — a local volume can only be used by one pod" }}
+{{- if and $localStorage (or (gt (int .Values.replicaCount) 1) .Values.autoscaling.enabled) }}
+{{- fail "Several replicas (replicaCount > 1 or autoscaling) require S3 storage (storage.s3.enabled) — a local volume can only be used by one pod" }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -9,7 +9,9 @@ metadata:
   labels:
     {{- include "optik.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
   strategy:
     # A ReadWriteOnce volume can't be mounted by old and new pod at the same time
     type: {{ ternary "Recreate" "RollingUpdate" $localStorage }}
@@ -151,4 +153,15 @@ spec:
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if and .Values.topologySpread (or (gt (int .Values.replicaCount) 1) .Values.autoscaling.enabled) }}
+      topologySpreadConstraints:
+        {{- range list "kubernetes.io/hostname" "topology.kubernetes.io/zone" }}
+        - maxSkew: 1
+          topologyKey: {{ . }}
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "optik.selectorLabels" $ | nindent 14 }}
+        {{- end }}
       {{- end }}
