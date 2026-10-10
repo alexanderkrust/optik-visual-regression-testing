@@ -22,5 +22,5 @@ export const load: LayoutServerLoad = async (event) => {
   // Admins see license problems and warnings on every page (never blocking)
   const license =
     me.role === 'admin' ? await serverApi(event.locals).license.get().catch(() => null) : null;
-  return { user: me, accessToken: event.locals.accessToken, license };
+  return { user: me, accessToken: event.locals.accessToken, license, locale: event.locals.locale };
 };

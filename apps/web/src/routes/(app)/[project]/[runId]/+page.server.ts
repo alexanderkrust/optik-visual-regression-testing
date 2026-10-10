@@ -1,3 +1,4 @@
+import { messages } from '$lib/i18n';
 import { serverApi } from '$lib/server/api';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
@@ -23,9 +24,9 @@ export const load: PageServerLoad = async (event) => {
   } catch (e) {
     if (e instanceof Error && e.message.startsWith('404')) {
       // Runs without visual changes are merged into the previous run of their branch
-      throw error(404, 'Run not found — runs without visual changes are merged into the previous run');
+      throw error(404, messages(event.locals.locale).review.runNotFound);
     }
     console.error(`[load] Failed to fetch snapshots for run ${event.params.runId}:`, e);
-    throw error(503, 'API unavailable — make sure the API server is running');
+    throw error(503, messages(event.locals.locale).review.apiUnavailable);
   }
 };

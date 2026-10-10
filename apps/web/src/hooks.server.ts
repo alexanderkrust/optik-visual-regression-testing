@@ -4,6 +4,7 @@ import { apiBase } from '$lib/server/api';
 import { COOKIE_NAME, cookieOptions, sessionSecret } from '$lib/server/session-cookie';
 import { setupRequired } from '$lib/server/setup';
 import { redirect } from '@sveltejs/kit';
+import { LOCALE_COOKIE, resolveLocale } from '$lib/i18n';
 
 /** Decode the JWT payload without verifying — for expiry check only. */
 function decodeJwtPayload(token: string): { exp?: number } | null {
@@ -73,6 +74,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   event.locals.user = null;
   event.locals.accessToken = null;
   event.locals.forwarded = forwardedHeaders(event);
+  event.locals.locale = resolveLocale(event.cookies.get(LOCALE_COOKIE), event.request.headers.get('accept-language'));
 
   const raw = event.cookies.get(COOKIE_NAME);
   if (raw) {
@@ -102,7 +104,9 @@ export const handle: Handle = async ({ event, resolve }) => {
     redirect(302, '/setup');
   }
 
-  const response = await resolve(event);
+  const response = await resolve(event, {
+    transformPageChunk: ({ html }) => html.replace('%lang%', event.locals.locale),
+  });
   setSecurityHeaders(response.headers, event.url);
   return response;
 };
