@@ -16,6 +16,7 @@ import { AuthModule } from './auth/auth.module';
 import { LicenseModule } from './license/license.module';
 import { AuditModule } from './audit/audit.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
+import { ObservabilityModule } from './observability/observability.module';
 import { AuditLogModule } from './ee/audit/audit-log.module';
 import { SsoModule } from './ee/sso/sso.module';
 import { TeamsModule } from './ee/teams/teams.module';
@@ -45,6 +46,7 @@ import { RetentionModule } from './ee/retention/retention.module';
     LicenseModule,
     AuditModule,
     MaintenanceModule,
+    ObservabilityModule,
     // Enterprise (ee/): only active with a license that includes the feature
     AuditLogModule,
     SsoModule,
