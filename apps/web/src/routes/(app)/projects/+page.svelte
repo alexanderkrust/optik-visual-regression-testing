@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatBytes } from '$lib/utils';
   import { enhance } from '$app/forms';
   import { FolderOpen, Plus, AlertCircle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
@@ -167,6 +168,10 @@
                 month: 'short',
                 day: 'numeric',
               })}
+              {#if data.storage.find((s) => s.projectId === project.id)}
+                {@const usage = data.storage.find((s) => s.projectId === project.id)!}
+                · {formatBytes(usage.bytes)} in {usage.images} image{usage.images === 1 ? '' : 's'}
+              {/if}
             </p>
           </CardContent>
         </Card>
