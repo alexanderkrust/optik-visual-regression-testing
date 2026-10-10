@@ -44,6 +44,36 @@ export class UsersService {
     return toDto(updated);
   }
 
+  /** Switches an account off or on again (admin). */
+  async setActive(admin: CurrentUser, id: string, active: boolean): Promise<User> {
+    this.access.requireAdmin(admin);
+    if (typeof active !== 'boolean') throw new BadRequestException('active must be true or false');
+    if (!active && id === admin.id) throw new BadRequestException('You cannot deactivate your own account');
+    return toDto(await this.applyActive(id, active));
+  }
+
+  /**
+   * Deactivated accounts can't sign in or use the API (their sessions end at
+   * once) and don't count as reviewers; their reviews and comments stay. Also
+   * used by SCIM provisioning.
+   */
+  async applyActive(id: string, active: boolean, details: Record<string, unknown> = {}) {
+    const user = await this.find(id);
+    if (!active && user.role === 'admin' && !user.deactivatedAt) await this.assertNotLastAdmin();
+    if (!!user.deactivatedAt === !active) return user;
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { deactivatedAt: active ? null : new Date() },
+    });
+    if (!active) await this.prisma.refreshToken.deleteMany({ where: { userId: id } });
+    await this.audit.record({
+      action: active ? 'user.reactivated' : 'user.deactivated',
+      target: { type: 'user', id, label: user.email },
+      details,
+    });
+    return updated;
+  }
+
   /** Removes the account; its reviews stay, without a reviewer. */
   async remove(admin: CurrentUser, id: string): Promise<void> {
     this.access.requireAdmin(admin);
@@ -60,12 +90,12 @@ export class UsersService {
   }
 
   private async assertNotLastAdmin() {
-    if ((await this.prisma.user.count({ where: { role: 'admin' } })) <= 1) {
+    if ((await this.prisma.user.count({ where: { role: 'admin', deactivatedAt: null } })) <= 1) {
       throw new BadRequestException('optik needs at least one admin');
     }
   }
 }
 
-function toDto(r: { id: string; email: string; role: UserRole; createdAt: Date }): User {
-  return { id: r.id, email: r.email, role: r.role, createdAt: r.createdAt.toISOString() };
+export function toDto(r: { id: string; email: string; role: UserRole; deactivatedAt: Date | null; createdAt: Date }): User {
+  return { id: r.id, email: r.email, role: r.role, active: !r.deactivatedAt, createdAt: r.createdAt.toISOString() };
 }
