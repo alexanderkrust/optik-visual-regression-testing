@@ -2,6 +2,9 @@ import type {
   ApiToken,
   AuditEventPage,
   AuditVerification,
+  IdentityProvider,
+  SaveIdentityProviderDto,
+  SsoSettings,
   CreateApiTokenDto,
   CreatedApiTokenDto,
   CreatedInvitation,
@@ -70,6 +73,18 @@ export function createApi(
       /** Query string as the API takes it (q, action, project, from, to, before, limit) */
       list: (query: string) => request<AuditEventPage>(`/audit-events?${query}`),
       verify: () => request<AuditVerification>('/audit-events/verify'),
+    },
+    sso: {
+      providers: () => request<IdentityProvider[]>('/sso/providers'),
+      create: (dto: SaveIdentityProviderDto) =>
+        request<IdentityProvider>('/sso/providers', { method: 'POST', body: JSON.stringify(dto) }),
+      update: (id: string, dto: SaveIdentityProviderDto) =>
+        request<IdentityProvider>(`/sso/providers/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
+      remove: (id: string) => request<void>(`/sso/providers/${id}`, { method: 'DELETE' }),
+      check: (id: string) => request<{ ok: boolean; message: string }>(`/sso/providers/${id}/check`, { method: 'POST' }),
+      settings: () => request<SsoSettings>('/sso/settings'),
+      updateSettings: (dto: SsoSettings) =>
+        request<SsoSettings>('/sso/settings', { method: 'PUT', body: JSON.stringify(dto) }),
     },
     license: {
       get: () => request<LicenseInfo>('/license'),
