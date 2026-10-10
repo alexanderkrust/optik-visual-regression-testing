@@ -24,6 +24,8 @@ export default defineConfig({
 			'/api': {
 				target: apiTarget,
 				changeOrigin: true,
+				// X-Forwarded-For with the client's address (audit log)
+				xfwd: true,
 				// The API builds links (e.g. single sign-on redirect URIs) from the browser's address
 				configure: (proxy) =>
 					proxy.on('proxyReq', (req, incoming) => {

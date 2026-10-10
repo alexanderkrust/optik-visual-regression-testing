@@ -142,6 +142,11 @@ model User {
   /// Null for accounts that only sign in with single sign-on
   password      String?        @map("password_hash")
   role          UserRole       @default(member)
+  /// Set when the account is switched off (e.g. by SCIM): no sign-in, no API
+  /// access, not counted as a reviewer; its reviews and comments stay
+  deactivatedAt DateTime?      @map("deactivated_at")
+  /// The identity provider's ID for the account (SCIM externalId)
+  scimExternalId String?       @map("scim_external_id")
   createdAt     DateTime       @default(now()) @map("created_at")
   refreshTokens RefreshToken[]
   memberships   ProjectMember[]
@@ -369,6 +374,8 @@ model Team {
   id          String        @id @default(uuid())
   name        String        @unique
   description String?
+  /// The identity provider's ID for the group (SCIM externalId)
+  scimExternalId String?    @map("scim_external_id")
   createdAt   DateTime      @default(now()) @map("created_at")
   members     TeamMember[]
   projects    TeamProject[]

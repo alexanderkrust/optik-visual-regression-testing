@@ -234,6 +234,16 @@ Admins add identity providers under *Single sign-on*. optik speaks **OpenID Conn
 
 Accounts are created on the first sign-in (role *member*) and linked to the provider's subject ID, so they survive e-mail changes; an existing account with the same e-mail address is linked. Sign-ins with an e-mail address the provider marks as unverified are refused. Behind a reverse proxy, make sure it passes `Host` / `X-Forwarded-Host` and `X-Forwarded-Proto`, or set `PUBLIC_URL` — the redirect URI is built from them.
 
+### Provisioning with SCIM (Enterprise)
+
+Entra ID, Okta and other identity providers can manage optik's accounts over SCIM 2.0: under *Single sign-on → Provisioning (SCIM)*, create a token and enter it at the provider together with the SCIM base URL (`https://<optik>/api/scim/v2`).
+
+- **Users** become optik accounts (e-mail = `userName`, without a password — they sign in with single sign-on). Deactivating them at the provider **deactivates** them in optik: running sessions end, sign-in and API access are refused, they no longer count as reviewers, and their reviews and comments stay. Deleting removes the account.
+- **Groups** become **teams** with the same members; give the teams roles in projects under *Teams*.
+- Every change appears in the audit log as made by *SCIM*. The last admin is never deactivated or deleted.
+
+Admins can also deactivate and reactivate accounts by hand under *Users*.
+
 ### Teams (Enterprise)
 
 Admins group people under *Teams* and give a team a role in projects. A person's role in a project is the highest of their own and their teams'; teams count towards the licensed reviewers like direct roles. Single sign-on can fill teams from the identity provider's groups (map a group to a team). Maintainers see under *Members* which teams have access. Access through existing teams keeps working if the license ends — only managing teams needs it.
@@ -433,6 +443,10 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/sso/providers/:id/check` | Read the discovery document (admin) |
 | GET/PUT | `/api/sso/settings` | `passwordLogin`: `all` or `admins` (admin) |
 
+### SCIM 2.0 (Enterprise; SCIM token)
+
+`/api/scim/v2`: `ServiceProviderConfig`, `ResourceTypes`, `Users` and `Groups` (GET with `filter=<attribute> eq "<value>"`, `startIndex`, `count`; POST; PUT; PATCH; DELETE). Admins manage the token with `GET/POST/DELETE /api/scim/token`.
+
 ### Teams (Enterprise; admins)
 
 | Method | Path | Description |
@@ -458,7 +472,7 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 |--------|------|-------------|
 | GET | `/api/auth/me` | The signed-in user incl. role |
 | GET | `/api/users` | List users (admin) |
-| PATCH | `/api/users/:id` | Change a user's role (admin) |
+| PATCH | `/api/users/:id` | Change a user's role (`{ role }`) or deactivate / reactivate (`{ active }`) (admin) |
 | DELETE | `/api/users/:id` | Remove a user (admin) |
 | POST | `/api/invitations` | Invite by email, optionally into a project (admin) |
 | GET | `/api/invitations` | Pending invitations (admin) |
@@ -545,7 +559,7 @@ optik is open source under the [Apache License 2.0](LICENSE). Enterprise feature
 |---|---|---|
 | Community | 5 | — |
 | Team | as licensed | — |
-| Enterprise | as licensed | audit log, single sign-on (OIDC, SAML), teams; SCIM, retention policies (in development) |
+| Enterprise | as licensed | audit log, single sign-on (OIDC, SAML), SCIM provisioning, teams; retention policies (in development) |
 
 *Reviewers* are the people who can accept or reject changes: admins, and maintainers and reviewers of any project. Developers who only run tests, and viewers, don't count.
 

@@ -16,6 +16,23 @@ export async function configureApp(app: NestFastifyApplication) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await app.register(helmet as any, { contentSecurityPolicy: false });
 
+  // SCIM clients (identity providers) send application/scim+json
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addContentTypeParser(
+      'application/scim+json',
+      { parseAs: 'string', bodyLimit: 1024 * 1024 },
+      (_req: unknown, body: string, done: (err: Error | null, value?: unknown) => void) => {
+        try {
+          done(null, body ? JSON.parse(body) : {});
+        } catch (err) {
+          (err as Error & { statusCode?: number }).statusCode = 400;
+          done(err as Error);
+        }
+      },
+    );
+
   // The API lives under /api; everything else is the web UI (same origin, no CORS)
   app.setGlobalPrefix('api');
 }

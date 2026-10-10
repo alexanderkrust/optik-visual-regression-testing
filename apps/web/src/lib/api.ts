@@ -5,6 +5,8 @@ import type {
   IdentityProvider,
   ProjectTeam,
   SaveTeamDto,
+  ScimTokenInfo,
+  CreatedScimToken,
   Team,
   SaveIdentityProviderDto,
   SsoSettings,
@@ -112,7 +114,14 @@ export function createApi(
       list: () => request<User[]>('/users'),
       setRole: (id: string, role: UserRole) =>
         request<User>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+      setActive: (id: string, active: boolean) =>
+        request<User>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) }),
       remove: (id: string) => request<void>(`/users/${id}`, { method: 'DELETE' }),
+    },
+    scim: {
+      token: () => request<ScimTokenInfo>('/scim/token'),
+      createToken: () => request<CreatedScimToken>('/scim/token', { method: 'POST' }),
+      revokeToken: () => request<void>('/scim/token', { method: 'DELETE' }),
     },
     invitations: {
       list: () => request<Invitation[]>('/invitations'),
