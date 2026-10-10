@@ -15,8 +15,24 @@ image:
 imagePullSecrets: []
 
 # More than one replica requires S3 storage (storage.s3.enabled), because the
-# local volume can only be mounted by one pod.
+# local volume can only be mounted by one pod. optik is stateless otherwise:
+# sessions, sign-in limits, SSO and maintenance work across replicas.
 replicaCount: 1
+
+# Scale with load instead of a fixed replicaCount (also needs S3 storage)
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+# With several replicas: keep at least one running during node drains
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# With several replicas: spread them over nodes (and zones, if labelled)
+topologySpread: true
 
 # ── Database ─────────────────────────────────────────────────────────────────
 database:

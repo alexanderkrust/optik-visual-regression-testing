@@ -24,4 +24,8 @@ Adapters (Vitest / Playwright) use this URL as OPTIK_SERVER_URL.
 
 Note: the bundled PostgreSQL is meant for evaluation and small installs. For
 production, use an external database (postgresql.enabled=false, database.existingSecret).
+{{- if or (gt (int .Values.replicaCount) 1) .Values.autoscaling.enabled }}
+With several optik replicas, the single bundled PostgreSQL is still a single point of failure —
+use a PostgreSQL with failover for high availability.
+{{- end }}
 {{- end }}

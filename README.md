@@ -87,6 +87,10 @@ For Kubernetes, `INSTALL.md` explains how to copy the images into an internal re
 - **Failed sign-ins are limited per account** (`LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES`), counted in memory per instance.
 - **Security headers**: Content-Security-Policy for the web UI, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS over HTTPS.
 
+### High availability, backup and restore
+
+optik is stateless apart from PostgreSQL and the image storage: run several instances behind a load balancer with S3 storage and a PostgreSQL with failover (Helm: `replicaCount` or `autoscaling`, with a PodDisruptionBudget and spreading over nodes). Sessions, sign-in limits, single sign-on and the daily housekeeping work across instances. See [docs/operations.md](docs/operations.md) for setup, backup (database first, then images) and a tested restore procedure.
+
 ### Monitoring
 
 - **Metrics:** Prometheus format at `/api/metrics` — HTTP requests by route, submitted snapshots by result, diff duration and queue, completed runs, reviews, open changes, notification and commit status deliveries, the license edition, and Node.js process metrics. Protect it with `METRICS_TOKEN`; the Helm chart can create a `ServiceMonitor` (`metrics.serviceMonitor.enabled`).
