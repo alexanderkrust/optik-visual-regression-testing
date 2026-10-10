@@ -29,6 +29,10 @@
     'auth.login_failed': 'Sign-in failed',
     'user.role_changed': 'Changed instance role',
     'user.removed': 'Removed user',
+    'user.provisioned': 'Provisioned user',
+    'user.updated': 'Changed user',
+    'user.deactivated': 'Deactivated user',
+    'user.reactivated': 'Reactivated user',
     'invitation.created': 'Invited',
     'invitation.revoked': 'Revoked invitation',
     'invitation.accepted': 'Accepted invitation',
@@ -58,6 +62,8 @@
     'team.member_added': 'Added team member',
     'team.member_removed': 'Removed team member',
     'team.project_role_changed': "Changed team's project role",
+    'scim.token_created': 'Created SCIM token',
+    'scim.token_revoked': 'Revoked SCIM token',
   };
 
   const GROUPS = [
@@ -73,6 +79,7 @@
     ['notification_channel.', 'Notifications'],
     ['team.', 'Teams'],
     ['sso.', 'Single sign-on'],
+    ['scim.', 'SCIM'],
     ['license.', 'License'],
   ] as const;
 

@@ -20,9 +20,10 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Change a user’s instance role (admin)' })
-  setRole(@User() user: CurrentUser, @Param('id') id: string, @Body() body: { role: UserRole }) {
-    return this.users.setRole(user, id, body?.role);
+  @ApiOperation({ summary: 'Change a user’s instance role or switch the account off/on: { role } or { active } (admin)' })
+  async update(@User() user: CurrentUser, @Param('id') id: string, @Body() body: { role?: UserRole; active?: boolean }) {
+    if (body?.active !== undefined) return this.users.setActive(user, id, body.active);
+    return this.users.setRole(user, id, body?.role as UserRole);
   }
 
   @Delete(':id')

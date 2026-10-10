@@ -38,12 +38,14 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid or expired access token');
     }
 
-    const user = await this.prisma.user.findUnique({
+    const found = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, role: true },
+      select: { id: true, email: true, role: true, deactivatedAt: true },
     });
-    if (!user) throw new UnauthorizedException('This account no longer exists');
+    if (!found) throw new UnauthorizedException('This account no longer exists');
+    if (found.deactivatedAt) throw new UnauthorizedException('This account is deactivated');
 
+    const { deactivatedAt: _deactivated, ...user } = found;
     request.user = user satisfies CurrentUser;
     return true;
   }
