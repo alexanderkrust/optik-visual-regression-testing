@@ -106,7 +106,8 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [x] Observability: Prometheus metrics (optional token, ServiceMonitor), structured JSON logs with request IDs, OpenTelemetry tracing (OTLP) — in the open core
 - [x] High availability: stateless API behind a load balancer (shared sign-in limits, cross-instance SSO, single-instance housekeeping; Helm PDB, HPA, topology spread); backup & restore guide (docs/operations.md, restore drill)
 - [x] License management in the admin UI (reviewer count, update period), `OPTIK_LICENSE`, notices for admins instead of lock-outs
-- [ ] No telemetry by default; documented data locations; accessible UI; German and English
+- [x] No telemetry; documented data locations and outgoing connections (docs/privacy.md); accessible UI (axe-core WCAG 2.1 AA, keyboard use)
+- [ ] German and English
 
 ## Phase 3 — Chromatic parity
 

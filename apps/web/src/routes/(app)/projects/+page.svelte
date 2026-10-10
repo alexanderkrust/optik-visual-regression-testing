@@ -158,7 +158,7 @@
       <a href="/{project.slug}" class="group block">
         <Card class="h-full transition-colors group-hover:border-primary/50 group-hover:shadow-sm">
           <CardHeader class="pb-3">
-            <CardTitle class="text-base">{project.name}</CardTitle>
+            <CardTitle level={2} class="text-base">{project.name}</CardTitle>
             <CardDescription class="font-mono text-xs">{project.slug}</CardDescription>
           </CardHeader>
           <CardContent>

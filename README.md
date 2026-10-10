@@ -87,6 +87,10 @@ For Kubernetes, `INSTALL.md` explains how to copy the images into an internal re
 - **Failed sign-ins are limited per account** (`LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES`), counted in memory per instance.
 - **Security headers**: Content-Security-Policy for the web UI, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS over HTTPS.
 
+### Privacy and accessibility
+
+optik sends no telemetry and never contacts the vendor — the only outgoing connections are integrations you configure. [docs/privacy.md](docs/privacy.md) lists every connection, the personal data optik stores and where, and how the web UI was checked for accessibility (WCAG 2.1 AA, keyboard use).
+
 ### High availability, backup and restore
 
 optik is stateless apart from PostgreSQL and the image storage: run several instances behind a load balancer with S3 storage and a PostgreSQL with failover (Helm: `replicaCount` or `autoscaling`, with a PodDisruptionBudget and spreading over nodes). Sessions, sign-in limits, single sign-on and the daily housekeeping work across instances. See [docs/operations.md](docs/operations.md) for setup, backup (database first, then images) and a tested restore procedure.
