@@ -8,6 +8,8 @@ declare global {
 			accessToken: string | null;
 			/** Client address and browser, passed on to the API for its audit log */
 			forwarded: Record<string, string>;
+			/** Language of the UI for this request */
+			locale: import('$lib/i18n').Locale;
 		}
 		// interface PageData {}
 		// interface PageState {}
