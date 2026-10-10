@@ -75,6 +75,8 @@ export interface Project {
   ciApiUrl: string | null;
   /** Whether a token is stored — the token itself is never returned */
   ciTokenConfigured: boolean;
+  /** Retention (Enterprise): days runs are kept; null keeps everything */
+  retentionDays: number | null;
   /** The signed-in user's role in this project */
   myRole: EffectiveProjectRole;
   createdAt: string;
@@ -392,7 +394,8 @@ export type AuditAction =
   | 'team.member_removed'
   | 'team.project_role_changed'
   | 'scim.token_created'
-  | 'scim.token_revoked';
+  | 'scim.token_revoked'
+  | 'retention.applied';
 
 export interface AuditActor {
   /** A signed-in user, a project's API token (adapters), or nobody (e.g. a failed sign-in) */
@@ -549,4 +552,28 @@ export interface ScimTokenInfo {
 
 export interface CreatedScimToken extends ScimTokenInfo {
   token: string;
+}
+
+// ------------------------------------------------------------------ storage and retention
+
+/** `GET /projects/:slug/storage`, `GET /storage` (all projects, admins). */
+export interface ProjectStorage {
+  projectId: string;
+  slug: string;
+  name: string;
+  /** Bytes of screenshots and diff images */
+  bytes: number;
+  /** Stored image files */
+  images: number;
+  runs: number;
+  snapshots: number;
+  /** Images stored before optik recorded sizes, not measured yet (done daily) */
+  unmeasured: number;
+}
+
+/** What a retention run removed (`POST /projects/:slug/retention/run`). */
+export interface RetentionResult {
+  runsDeleted: number;
+  snapshotsDeleted: number;
+  bytesFreed: number;
 }
