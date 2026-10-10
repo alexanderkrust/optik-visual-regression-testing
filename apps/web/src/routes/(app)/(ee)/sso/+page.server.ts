@@ -10,15 +10,16 @@ export const load: PageServerLoad = async (event) => {
   if (user.role !== 'admin') error(403, 'Only admins can set up single sign-on');
   const api = serverApi(event.locals);
   try {
-    const [providers, settings, projects] = await Promise.all([
+    const [providers, settings, projects, teams] = await Promise.all([
       api.sso.providers(),
       api.sso.settings(),
       api.projects.list(),
+      api.teams.list().catch(() => []),
     ]);
-    return { available: true as const, providers, settings, projects };
+    return { available: true as const, providers, settings, projects, teams };
   } catch (e) {
     if (e instanceof Error && e.message.startsWith('403')) {
-      return { available: false as const, providers: [], settings: null, projects: [] };
+      return { available: false as const, providers: [], settings: null, projects: [], teams: [] };
     }
     throw e;
   }
@@ -32,14 +33,16 @@ const message = (e: unknown) =>
 function providerDto(data: FormData): SaveIdentityProviderDto {
   const text = (name: string) => String(data.get(name) ?? '').trim();
   const groups = data.getAll('mappingGroup').map(String);
-  const projects = data.getAll('mappingProject').map(String);
+  const targets = data.getAll('mappingTarget').map(String);
   const roles = data.getAll('mappingRole').map(String);
   const roleMappings: SsoRoleMapping[] = groups
-    .map((group, i) => ({
-      group: group.trim(),
-      project: projects[i] || null,
-      role: (projects[i] ? roles[i] : 'admin') as 'admin' | ProjectRole,
-    }))
+    .map((group, i): SsoRoleMapping => {
+      const [kind, ...rest] = (targets[i] ?? '').split(':');
+      const name = rest.join(':');
+      if (kind === 'project') return { group: group.trim(), project: name, role: roles[i] as ProjectRole };
+      if (kind === 'team') return { group: group.trim(), project: null, team: name, role: 'member' };
+      return { group: group.trim(), project: null, role: 'admin' };
+    })
     .filter((m) => m.group);
   return {
     name: text('name'),

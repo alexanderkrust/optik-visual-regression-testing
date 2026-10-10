@@ -14,6 +14,27 @@ export type EffectiveRole = ProjectRole | 'admin';
 
 const RANK: Record<EffectiveRole, number> = { viewer: 1, reviewer: 2, maintainer: 3, admin: 4 };
 
+/** Prisma include for a project: the user's own membership and their teams' roles. */
+export function rolesOf(userId: string) {
+  return {
+    members: { where: { userId }, select: { role: true } },
+    teams: { where: { team: { members: { some: { userId } } } }, select: { role: true } },
+  } as const;
+}
+
+/**
+ * A user's role in a project: the highest of their own membership and the
+ * roles of their teams (Enterprise). Team access keeps working without the
+ * license — only managing teams needs it.
+ */
+export function effectiveRole(project: {
+  members: { role: ProjectRole }[];
+  teams: { role: ProjectRole }[];
+}): ProjectRole | null {
+  const roles = [...project.members, ...project.teams].map((m) => m.role);
+  return roles.sort((a, b) => RANK[b] - RANK[a])[0] ?? null;
+}
+
 /**
  * Who may do what in a project. Projects a user has no access to are reported
  * as "not found", so their existence isn't revealed; too low a role is
@@ -31,17 +52,17 @@ export class AccessService {
   ): Promise<{ project: Project; role: EffectiveRole }> {
     const project = await this.prisma.project.findUnique({
       where,
-      include: { members: { where: { userId: user.id }, select: { role: true } } },
+      include: rolesOf(user.id),
     });
     const role: EffectiveRole | null =
-      user.role === 'admin' ? 'admin' : (project?.members[0]?.role ?? null);
+      user.role === 'admin' ? 'admin' : project ? effectiveRole(project) : null;
     if (!project || !role) {
       throw new NotFoundException(`Project "${'slug' in where ? where.slug : where.id}" not found`);
     }
     if (RANK[role] < RANK[min]) {
       throw new ForbiddenException(`This needs the ${min} role in project "${project.slug}"`);
     }
-    const { members: _members, ...rest } = project;
+    const { members: _members, teams: _teams, ...rest } = project;
     return { project: rest, role };
   }
 
@@ -68,7 +89,14 @@ export class AccessService {
 
   /** Filter for the projects a user may see. */
   visibleProjects(user: CurrentUser) {
-    return user.role === 'admin' ? {} : { members: { some: { userId: user.id } } };
+    return user.role === 'admin'
+      ? {}
+      : {
+          OR: [
+            { members: { some: { userId: user.id } } },
+            { teams: { some: { team: { members: { some: { userId: user.id } } } } } },
+          ],
+        };
   }
 
   requireAdmin(user: CurrentUser) {

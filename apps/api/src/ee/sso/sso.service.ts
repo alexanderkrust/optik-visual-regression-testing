@@ -28,6 +28,7 @@ import { AuthService, SessionTokens } from '../../auth/auth.service';
 import { LoginPolicy } from '../../auth/login-policy';
 import { LicenseService } from '../../license/license.service';
 import { authorizationUrl, completeSignIn, discover, randomToken } from './oidc';
+import { TeamsService } from '../teams/teams.service';
 
 export const STATE_COOKIE = 'optik_sso';
 const STATE_TTL_S = 600;
@@ -70,6 +71,7 @@ export class SsoService implements OnModuleInit {
     private readonly auth: AuthService,
     private readonly loginPolicy: LoginPolicy,
     private readonly license: LicenseService,
+    private readonly teams: TeamsService,
   ) {}
 
   onModuleInit() {
@@ -313,8 +315,9 @@ export class SsoService implements OnModuleInit {
     const actor = { type: 'user' as const, id: user.id, label: user.email };
     const source = { source: 'sso', provider: provider.name };
 
-    if (mappings.some((m) => m.project === null)) {
-      const role = matching.some((m) => m.project === null) ? 'admin' : 'member';
+    const isAdminMapping = (m: SsoRoleMapping) => m.project === null && !m.team;
+    if (mappings.some(isAdminMapping)) {
+      const role = matching.some(isAdminMapping) ? 'admin' : 'member';
       const lastAdmin =
         user.role === 'admin' && role === 'member' && (await this.prisma.user.count({ where: { role: 'admin' } })) <= 1;
       if (role !== user.role && !lastAdmin) {
@@ -354,6 +357,12 @@ export class SsoService implements OnModuleInit {
         target: { type: 'user', id: user.id, label: user.email },
         details: { ...(current ? { from: current.role } : {}), ...(wanted ? { to: wanted } : {}), ...source },
       });
+    }
+
+    const coveredTeams = [...new Set(mappings.map((m) => m.team).filter((t): t is string => !!t))];
+    if (coveredTeams.length > 0) {
+      const wantedTeams = matching.map((m) => m.team).filter((t): t is string => !!t);
+      await this.teams.syncMemberships(user, coveredTeams, wantedTeams, source);
     }
     return user;
   }
@@ -458,7 +467,12 @@ function validate(dto: SaveIdentityProviderDto, current: ProviderRow | null) {
   const roleMappings = (dto.roleMappings ?? (current?.roleMappings as unknown as SsoRoleMapping[]) ?? []).map((m) => {
     const group = typeof m?.group === 'string' ? m.group.trim() : '';
     const project = typeof m?.project === 'string' && m.project.trim() ? m.project.trim() : null;
+    const team = typeof m?.team === 'string' && m.team.trim() ? m.team.trim() : null;
     if (!group) throw new BadRequestException('Every role mapping needs a group');
+    if (team) {
+      if (project) throw new BadRequestException('A mapping goes to a project or a team, not both');
+      return { group, project: null, team, role: 'member' as const };
+    }
     if (project === null && m.role !== 'admin') throw new BadRequestException('Without a project, a group can only map to admin');
     if (project !== null && !(m.role in ROLE_RANK)) {
       throw new BadRequestException('Project roles are viewer, reviewer or maintainer');

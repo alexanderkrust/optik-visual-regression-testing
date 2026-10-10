@@ -12,14 +12,16 @@ export const load: PageServerLoad = async (event) => {
     ]);
     // Tokens and members are for maintainers (and admins) only
     const manages = project.myRole === 'maintainer' || project.myRole === 'admin';
-    const [tokens, members, channels] = manages
+    const [tokens, members, channels, teams] = manages
       ? await Promise.all([
           api.tokens.list(event.params.project),
           api.members.list(event.params.project),
           api.notifications.list(event.params.project),
+          // Teams (Enterprise) — empty on servers without them
+          api.teams.forProject(event.params.project).catch(() => []),
         ])
-      : [[], [], []];
-    return { project, runs, tokens, members, channels, manages, projectSlug: event.params.project };
+      : [[], [], [], []];
+    return { project, runs, tokens, members, channels, teams, manages, projectSlug: event.params.project };
   } catch (e) {
     if (e instanceof Error && e.message.startsWith('404')) error(404, 'Project not found');
     console.error(`[load] Failed to fetch project data for ${event.params.project}:`, e);
