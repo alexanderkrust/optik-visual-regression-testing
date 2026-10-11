@@ -1,0 +1,54 @@
+name: Renderer
+
+# Builds the optik-renderer image when it changes and checks that a client
+# can render a page with each of its browsers.
+
+on:
+  pull_request:
+    paths: ['docker/renderer/**', '.github/workflows/renderer.yml']
+  push:
+    branches: [main]
+    paths: ['docker/renderer/**', '.github/workflows/renderer.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Build and smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          version=$(grep -v '^#' docker/renderer/versions.txt | tail -1)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          docker build --platform linux/amd64 --build-arg "PLAYWRIGHT_VERSION=$version" -t optik-renderer docker/renderer
+      - name: Start
+        run: |
+          docker run -d --name renderer -p 127.0.0.1:3100:3000 optik-renderer
+          for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' renderer)" = healthy ] && exit 0
+            sleep 2
+          done
+          docker logs renderer; exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Render with every browser
+        run: |
+          npm install --no-save --no-audit --no-fund "playwright-core@$VERSION"
+          node -e '
+            const pw = require("playwright-core");
+            (async () => {
+              for (const name of ["chromium", "firefox", "webkit"]) {
+                const browser = await pw[name].connect("ws://127.0.0.1:3100/");
+                const page = await browser.newPage();
+                await page.setContent("<p style=\"font: 16px sans-serif\">optik renderer</p>");
+                const png = await page.screenshot();
+                if (png.length < 100) throw new Error(name + ": empty screenshot");
+                console.log(name, "ok,", png.length, "bytes");
+                await browser.close();
+              }
+            })().catch((e) => { console.error(e); process.exit(1); });
+          '

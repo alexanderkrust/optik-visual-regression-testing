@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test'
-import { optikConfig } from '@optik/playwright'
+import { optikConfig, rendererConnectOptions } from '@optik/playwright'
 
 // Create an API token in the Optik UI and set it as OPTIK_TOKEN:
 //   OPTIK_TOKEN=optik_xxx pnpm test:e2e
@@ -12,6 +12,8 @@ export default defineConfig({
   },
   use: {
     baseURL: 'http://localhost:5174',
+    // Pinned browsers and fonts when OPTIK_RENDERER points to an optik-renderer container
+    connectOptions: rendererConnectOptions(),
   },
   testDir: 'e2e',
 })

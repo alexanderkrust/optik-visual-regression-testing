@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config"
 import react from "@vitejs/plugin-react"
 import { playwright } from "@vitest/browser-playwright"
-import { optik } from "@optik/vitest"
+import { optik, rendererConnectOptions } from "@optik/vitest"
 
 // Create an API token in the Optik UI and set it as OPTIK_TOKEN in the root .env
 export default defineConfig({
@@ -15,7 +15,11 @@ export default defineConfig({
     browser: {
       enabled: true,
       // Screenshots at Retina resolution, like the app looks on a HiDPI screen
-      provider: playwright({ contextOptions: { deviceScaleFactor: 2 } }),
+      provider: playwright({
+        contextOptions: { deviceScaleFactor: 2 },
+        // Pinned browsers and fonts when OPTIK_RENDERER points to an optik-renderer container
+        connectOptions: rendererConnectOptions(),
+      }),
       headless: true,
       instances: [{ browser: "chromium" }],
     },

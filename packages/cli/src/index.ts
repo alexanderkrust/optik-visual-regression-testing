@@ -3,3 +3,5 @@ export type { UploadOptions } from './upload';
 export { BROWSERS, listStories, optikParameters, parseViewport, storybook } from './storybook';
 export type { BrowserName, OptikParameters, StorybookOptions, StorybookResult, Viewport } from './storybook';
 export type { RunOptions, RunResult } from './run';
+export { RENDERER_IMAGE, playwrightVersion, startRenderer } from './renderer';
+export type { Renderer } from './renderer';

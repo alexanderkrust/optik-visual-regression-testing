@@ -43,6 +43,11 @@ export interface StorybookOptions extends RunOptions {
   viewports?: Viewport[];
   /** Per story, in milliseconds */
   timeout?: number;
+  /**
+   * WebSocket endpoint of a Playwright browser server — the optik-renderer
+   * container — instead of the locally installed browsers
+   */
+  renderer?: string;
 }
 
 export interface StorybookResult extends RunResult {
@@ -261,7 +266,15 @@ export async function captureStorybook(baseUrl: string, options: StorybookOption
   const playwright = loadPlaywright();
   const browsers = new Map<BrowserName, Browser>();
   try {
-    for (const name of browserNames) browsers.set(name, await playwright[name].launch());
+    for (const name of browserNames) {
+      browsers.set(
+        name,
+        options.renderer
+          ? // The renderer's browsers reach this machine's localhost (the Storybook server) through the connection
+            await playwright[name].connect(options.renderer, { exposeNetwork: '<loopback>', timeout: 60_000 })
+          : await playwright[name].launch(),
+      );
+    }
 
     const openPage = async (worker: Worker, browserName: BrowserName) => {
       let open = worker.pages.get(browserName);
@@ -270,6 +283,9 @@ export async function captureStorybook(baseUrl: string, options: StorybookOption
           viewport: defaultViewports[0],
           deviceScaleFactor: 1,
           reducedMotion: 'reduce',
+          // Dates and numbers the same on every machine
+          locale: 'en-US',
+          timezoneId: 'UTC',
         });
         await context.addInitScript(recordStoryEvents);
         await context.addInitScript({
