@@ -280,6 +280,19 @@ Each run belongs to a suite: `vitest` and `playwright` by default, configurable 
 
 Runs from before suites existed are in the `default` suite. Other suites fall back to its baselines until they have their own, so existing reviews carry over.
 
+### Browsers and viewports
+
+A snapshot is identified by its name, the **browser** and the **viewport** it was taken with — `Button/Primary` in Firefox at 375×667 has its own baseline, separate from Chromium at 1280×720. Browsers rendering text a little differently is therefore never a change. The adapters report both on their own:
+
+- **Playwright:** the browser and viewport of the test's page — run several [projects](https://playwright.dev/docs/test-projects) (e.g. `Desktop Chrome`, `iPhone 13`, `Desktop Firefox`) and every snapshot is checked in each.
+- **Vitest browser mode:** the browser instance and the viewport at the time of the snapshot (also after `page.viewport()`).
+- **Storybook:** `--browsers` and `--viewports`, or per story (see [Storybook](#storybook)).
+- **CLI upload:** `--browser` and `--viewport`, if the screenshots were taken with one.
+
+The review page lists each variant; the buttons above the image switch between the variants of a snapshot. Ignore regions and the threshold apply per viewport (their pixel positions depend on it) and to every browser.
+
+Upgrading from a version without variants: a variant without a baseline of its own compares against the snapshot's baseline from before, and settings saved before apply to every viewport without its own — no change has to be accepted again.
+
 | Result | Status | Test |
 |--------|--------|------|
 | No baseline yet | `new` — becomes the baseline | passes |
@@ -437,6 +450,7 @@ Every PNG under the directory becomes a snapshot named after its path without `.
 | `OPTIK_TOKEN` | — | Project API token (required) |
 | `OPTIK_SERVER_URL` / `--server` | `http://localhost:3000` | optik server |
 | `--suite` | `cli` | Runs are merged and baselines are kept per suite |
+| `--browser`, `--viewport` | — | Browser and viewport of the screenshots, e.g. `firefox`, `375x667` |
 | `--concurrency` | `4` | Parallel uploads |
 
 Use the same file names in every run — a renamed file is a new snapshot.
@@ -462,17 +476,19 @@ export const Clock: Story = {
       disable: true,   // no snapshot of this story
       delay: 300,      // wait after rendering, e.g. for a chart that animates in JavaScript
       fullPage: true,  // the whole page instead of the story's root — for modals in a portal (default with layout: 'fullscreen')
+      viewports: ['375x667', 1280], // instead of --viewports; a number is a width (with the height of the first --viewports)
     },
   },
 }
 ```
 
-Coming from Chromatic? `chromatic: { disableSnapshot, delay }` are honoured as well.
+Coming from Chromatic? `chromatic: { disableSnapshot, delay, viewports }` are honoured as well.
 
 | Option | Default | |
 |---|---|---|
-| `--viewport` | `1280x720` | Browser window |
-| `--concurrency` | `4` | Stories rendered in parallel |
+| `--browsers` | `chromium` | `chromium`, `firefox` and/or `webkit` — install them with `npx playwright install` |
+| `--viewports` | `1280x720` | e.g. `375x667,768x1024,1280x720` |
+| `--concurrency` | `4` | Stories rendered in parallel, per browser |
 | `--timeout` | `30` | Seconds a story may take to render |
 
 Exit codes as for `optik upload`; a story that fails to render (an error, or the timeout) exits with `2`, after the other stories were uploaded. Supports Storybook 7 and later (`index.json`) and 6.4+ (`stories.json`).
@@ -606,7 +622,7 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 |--------|------|-------------|
 | POST | `/api/runs` | Start a new run |
 | POST | `/api/runs/:id/complete` | Mark run complete |
-| POST | `/api/snapshots` | Submit a screenshot |
+| POST | `/api/snapshots` | Submit a screenshot (multipart: `runId`, `name`, `file`, optional `browser`, `viewport`) |
 | GET | `/api/snapshots/:id/image` | Serve PNG — signed URL (`imageUrl` in the snapshot) or JWT |
 | GET | `/api/snapshots/:id/diff` | Serve diff PNG — signed URL (`diffUrl`) or JWT |
 

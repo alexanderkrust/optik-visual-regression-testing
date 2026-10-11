@@ -388,6 +388,8 @@ export const de: Messages = {
     threshold: 'Schwellenwert (% der Pixel, die sich ändern dürfen)',
     regions: (n: number) => plural(n, 'Bereich', 'Bereiche'),
     clearRegions: 'Bereiche löschen',
+    variants: 'Varianten',
+    editHintViewport: (viewport: string) => `Sie gelten für diesen Viewport (${viewport}), in jedem Browser.`,
     thresholdInvalid: 'Der Schwellenwert ist ein Prozentwert zwischen 0 und 100.',
     selectSnapshot: 'Wählen Sie einen Snapshot zum Prüfen',
     helpDescription: 'Ein Review ganz ohne Maus durcharbeiten.',

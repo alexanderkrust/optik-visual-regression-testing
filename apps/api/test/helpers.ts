@@ -153,10 +153,12 @@ export class AdapterClient {
     });
   }
 
-  submit(runId: string, name: string, image: Buffer) {
+  submit(runId: string, name: string, image: Buffer, variant: { browser?: string; viewport?: string } = {}) {
     const form = new FormData();
     form.append('runId', runId);
     form.append('name', name);
+    if (variant.browser !== undefined) form.append('browser', variant.browser);
+    if (variant.viewport !== undefined) form.append('viewport', variant.viewport);
     form.append('file', new Blob([new Uint8Array(image)], { type: 'image/png' }), `${name}.png`);
     return call(`${this.api}/snapshots`, { token: this.token, form });
   }

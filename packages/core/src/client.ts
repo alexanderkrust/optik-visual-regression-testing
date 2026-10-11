@@ -1,4 +1,4 @@
-import type { CreateRunDto, Run, SubmittedSnapshot } from '@optik/shared';
+import type { CreateRunDto, Run, SnapshotVariant, SubmittedSnapshot } from '@optik/shared';
 import { getAncestorCommits, getCurrentBranch, getCurrentCommit, getPullRequest } from './git';
 
 /** Base URL of the optik server (web UI and API share one origin). */
@@ -55,11 +55,16 @@ export class OptikClient {
     });
   }
 
-  /** Uploads one PNG screenshot; the server compares it with the baseline right away. */
-  async submit(runId: string, name: string, png: Uint8Array): Promise<SubmittedSnapshot> {
+  /**
+   * Uploads one PNG screenshot; the server compares it with the baseline right
+   * away. Name, browser and viewport identify a snapshot.
+   */
+  async submit(runId: string, name: string, png: Uint8Array, variant: SnapshotVariant = {}): Promise<SubmittedSnapshot> {
     const form = new FormData();
     form.append('runId', runId);
     form.append('name', name);
+    if (variant.browser) form.append('browser', variant.browser);
+    if (variant.viewport) form.append('viewport', variant.viewport);
     form.append('file', new Blob([new Uint8Array(png)], { type: 'image/png' }), `${name}.png`);
     return this.request<SubmittedSnapshot>('/snapshots', `submit snapshot "${name}"`, { method: 'POST', body: form });
   }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'util';
 import type { RunResult } from './run';
-import { storybook } from './storybook';
+import { BROWSERS, parseViewport, storybook, type BrowserName } from './storybook';
 import { collectScreenshots, upload } from './upload';
 
 const HELP = `Usage:
@@ -20,9 +20,14 @@ Options:
   --server <url>          optik server (default: OPTIK_SERVER_URL, else http://localhost:3000)
   --fail-on-changes       Exit with 1 when snapshots changed (default: the project setting)
   --no-fail-on-changes    Exit with 0 even when snapshots changed
-  --concurrency <n>       Parallel uploads or browser pages (default: 4)
-  --viewport <w>x<h>      storybook: browser viewport (default: 1280x720)
+  --concurrency <n>       Parallel uploads, or browser pages per browser (default: 4)
+  --browser <name>        upload: browser the screenshots were taken with (e.g. firefox)
+  --viewport <w>x<h>      upload: viewport the screenshots were taken with
+  --browsers <list>       storybook: chromium, firefox and/or webkit (default: chromium)
+  --viewports <list>      storybook: e.g. 375x667,1280x720 (default: 1280x720)
   --timeout <seconds>     storybook: time a story may take to render (default: 30)
+
+Name, browser and viewport identify a snapshot: each combination has its own baseline.
   -h, --help              Show this help
   -v, --version           Show the version
 
@@ -55,7 +60,10 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
       'fail-on-changes': { type: 'boolean' },
       'no-fail-on-changes': { type: 'boolean' },
       concurrency: { type: 'string', default: '4' },
-      viewport: { type: 'string', default: '1280x720' },
+      browser: { type: 'string' },
+      viewport: { type: 'string' },
+      browsers: { type: 'string', default: 'chromium' },
+      viewports: { type: 'string' },
       timeout: { type: 'string', default: '30' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
@@ -94,10 +102,17 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
   };
 
   if (command === 'storybook') {
-    const viewport = /^(\d+)x(\d+)$/.exec(values.viewport!);
+    // --viewport is accepted for a single viewport
+    const viewports = (values.viewports ?? values.viewport ?? '1280x720').split(',').map((v) => parseViewport(v));
+    const browsers = values.browsers!.split(',').map((b) => b.trim().toLowerCase());
     const timeout = Number(values.timeout);
-    if (!viewport) {
-      console.error('--viewport must look like 1280x720');
+    if (viewports.some((v) => !v)) {
+      console.error('--viewports must look like 375x667,1280x720');
+      return 2;
+    }
+    const unknown = browsers.filter((b) => !BROWSERS.includes(b as BrowserName));
+    if (unknown.length > 0) {
+      console.error(`Unknown browser ${unknown.join(', ')} — use ${BROWSERS.join(', ')}`);
       return 2;
     }
     if (!(timeout > 0)) {
@@ -111,7 +126,8 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     const result = await storybook(paths[0] ?? 'storybook-static', {
       ...run,
       suite: values.suite ?? 'storybook',
-      viewport: { width: Number(viewport[1]), height: Number(viewport[2]) },
+      browsers: [...new Set(browsers)] as BrowserName[],
+      viewports: viewports as { width: number; height: number }[],
       timeout: timeout * 1000,
     });
     summary(result, [
@@ -131,7 +147,16 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     console.error(`No PNG files found in ${paths.join(', ')}`);
     return 2;
   }
-  const result = await upload(screenshots, { ...run, suite: values.suite ?? 'cli' });
+  const viewport = values.viewport ? parseViewport(values.viewport) : undefined;
+  if (viewport === null) {
+    console.error('--viewport must look like 1280x720');
+    return 2;
+  }
+  const result = await upload(screenshots, {
+    ...run,
+    suite: values.suite ?? 'cli',
+    variant: { browser: values.browser, viewport: viewport ? `${viewport.width}x${viewport.height}` : undefined },
+  });
   summary(result);
   return result.failed > 0 ? 1 : 0;
 }

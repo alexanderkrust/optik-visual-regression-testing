@@ -1,5 +1,5 @@
 import { OptikClient, shouldFail } from "@optik/core"
-import type { SubmittedSnapshot } from "@optik/shared"
+import type { SnapshotVariant, SubmittedSnapshot } from "@optik/shared"
 
 export type SnapshotResult = Pick<SubmittedSnapshot, "status" | "diffScore" | "failTest"> & {
   /** Absolute link to the review page */
@@ -14,6 +14,7 @@ export type SnapshotResult = Pick<SubmittedSnapshot, "status" | "diffScore" | "f
 export async function submitScreenshot(
   name: string,
   screenshot: Buffer | Uint8Array,
+  variant: SnapshotVariant = {},
 ): Promise<SnapshotResult> {
   const runId = process.env._OPTIK_RUN_ID
   const token = process.env._OPTIK_TOKEN
@@ -25,7 +26,7 @@ export async function submitScreenshot(
   }
 
   const client = new OptikClient({ token })
-  const result = await client.submit(runId, name, screenshot)
+  const result = await client.submit(runId, name, screenshot, variant)
   // The adapter option wins, then the server's decision (project setting)
   const override = process.env._OPTIK_FAIL_ON_CHANGES
   return {

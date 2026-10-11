@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { listStories, optikParameters } from '../dist/index.js';
+import { listStories, optikParameters, parseViewport } from '../dist/index.js';
 import { serveDirectory, snapshotName } from '../dist/storybook.js';
 
 async function storybookBuild(files) {
@@ -83,4 +83,14 @@ test('reads optik parameters, and Chromatic parameters for an easy switch', () =
   });
   assert.equal(optikParameters({ optik: { disable: false }, chromatic: { disableSnapshot: true } }).disable, false);
   assert.equal(optikParameters({ layout: 'fullscreen' }).fullPage, true);
+  assert.deepEqual(optikParameters({ optik: { viewports: ['375x667', 1440] } }).viewports, ['375x667', 1440]);
+  assert.deepEqual(optikParameters({ chromatic: { viewports: [320, 1200] } }).viewports, [320, 1200]);
+  assert.equal('viewports' in optikParameters({ optik: { viewports: [] } }), false);
+});
+
+test('parses viewports, and widths with a default height', () => {
+  assert.deepEqual(parseViewport('375x667'), { width: 375, height: 667 });
+  assert.deepEqual(parseViewport(' 1280 X 720 '), { width: 1280, height: 720 });
+  assert.deepEqual(parseViewport(320, 900), { width: 320, height: 900 });
+  for (const bad of ['wide', '0x100', '100', '100x', -5, 1.5]) assert.equal(parseViewport(bad), null, String(bad));
 });

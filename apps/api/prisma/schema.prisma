@@ -112,6 +112,10 @@ model Snapshot {
   run        Run            @relation(fields: [runId], references: [id])
   runId      String         @map("run_id")
   name       String
+  /// Browser and viewport ("1280x720") the screenshot was taken with — with the
+  /// name they identify a snapshot. Empty when the adapter didn't say.
+  browser    String         @default("")
+  viewport   String         @default("")
   status     SnapshotStatus @default(new)
   baseline   Snapshot?      @relation("baseline", fields: [baselineId], references: [id])
   baselineId String?        @map("baseline_id")
@@ -132,7 +136,7 @@ model Snapshot {
   createdAt  DateTime       @default(now()) @map("created_at")
   comments   SnapshotComment[]
 
-  @@index([name, imageHash])
+  @@index([name, browser, viewport, imageHash])
   @@map("snapshots")
 }
 
@@ -260,13 +264,15 @@ model SnapshotSetting {
   projectId     String   @map("project_id")
   suite         String
   name          String
+  /// Regions are in pixels, so settings apply per viewport (and to every browser)
+  viewport      String   @default("")
   /// [{ x, y, width, height }] in image pixels
   ignoreRegions Json     @default("[]") @map("ignore_regions")
   /// Share of pixels (0–1) that may change before a snapshot counts as changed
   threshold     Float    @default(0)
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  @@unique([projectId, suite, name])
+  @@unique([projectId, suite, name, viewport])
   @@map("snapshot_settings")
 }
 

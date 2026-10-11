@@ -1,5 +1,5 @@
 export { collectScreenshots, upload } from './upload';
 export type { UploadOptions } from './upload';
-export { listStories, optikParameters, storybook } from './storybook';
-export type { OptikParameters, StorybookOptions, StorybookResult } from './storybook';
+export { BROWSERS, listStories, optikParameters, parseViewport, storybook } from './storybook';
+export type { BrowserName, OptikParameters, StorybookOptions, StorybookResult, Viewport } from './storybook';
 export type { RunOptions, RunResult } from './run';

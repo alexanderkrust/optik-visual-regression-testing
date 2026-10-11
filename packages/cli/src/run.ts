@@ -1,5 +1,5 @@
 import { OptikClient, shouldFail } from '@optik/core';
-import type { Run, SubmittedSnapshot } from '@optik/shared';
+import type { Run, SnapshotVariant, SubmittedSnapshot } from '@optik/shared';
 
 export interface RunOptions {
   /** Project-scoped API token (optik_...) */
@@ -17,7 +17,7 @@ export interface RunResult {
   run: Run;
   /** Link to the run in the web UI */
   runUrl: string;
-  snapshots: { name: string; result: SubmittedSnapshot }[];
+  snapshots: { name: string; variant: SnapshotVariant; result: SubmittedSnapshot }[];
   /** Snapshots that fail the run (changes, unless turned off) */
   failed: number;
 }
@@ -30,6 +30,12 @@ const LABEL: Record<SubmittedSnapshot['status'], string> = {
   rejected: '✗ rejected ',
 };
 
+/** "Button/Primary [firefox 375x667]" */
+export function label(name: string, variant: SnapshotVariant = {}) {
+  const parts = [variant.browser, variant.viewport].filter(Boolean);
+  return parts.length ? `${name} [${parts.join(' ')}]` : name;
+}
+
 /**
  * Starts a run, lets `work` submit screenshots and completes the run. When
  * `work` throws, the run is left incomplete — a partial run must not become
@@ -38,7 +44,7 @@ const LABEL: Record<SubmittedSnapshot['status'], string> = {
 export async function withRun(
   options: RunOptions,
   describe: string,
-  work: (submit: (name: string, png: Uint8Array) => Promise<void>) => Promise<void>,
+  work: (submit: (name: string, png: Uint8Array, variant?: SnapshotVariant) => Promise<void>) => Promise<void>,
 ): Promise<RunResult> {
   const log = options.log ?? (() => {});
   const client = new OptikClient({ token: options.token, serverUrl: options.serverUrl });
@@ -46,16 +52,16 @@ export async function withRun(
   log(`Run ${run.id.slice(0, 8)} · ${run.branch} · suite ${run.suite} · ${describe}`);
 
   const snapshots: RunResult['snapshots'] = [];
-  await work(async (name, png) => {
-    const result = await client.submit(run.id, name, png);
-    snapshots.push({ name, result });
+  await work(async (name, png, variant = {}) => {
+    const result = await client.submit(run.id, name, png, variant);
+    snapshots.push({ name, variant, result });
     const score = result.status === 'pending' ? ` ${((result.diffScore ?? 0) * 100).toFixed(2)}%` : '';
-    log(`  ${LABEL[result.status]} ${name}${score}`);
+    log(`  ${LABEL[result.status]} ${label(name, variant)}${score}`);
   });
 
   // A run without changes is merged into the previous one — link to that
   const completed = await client.complete(run.id);
-  snapshots.sort((a, b) => a.name.localeCompare(b.name));
+  snapshots.sort((a, b) => label(a.name, a.variant).localeCompare(label(b.name, b.variant)));
   return {
     run: completed,
     runUrl: client.url(`/${completed.projectSlug}/${completed.id}`),

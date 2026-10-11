@@ -388,6 +388,8 @@ export const en = {
     threshold: 'Threshold (% of pixels that may change)',
     regions: (n: number) => plural(n, 'region', 'regions'),
     clearRegions: 'Clear regions',
+    variants: 'Variants',
+    editHintViewport: (viewport: string) => `They apply to this viewport (${viewport}), in every browser.`,
     thresholdInvalid: 'The threshold is a percentage between 0 and 100.',
     selectSnapshot: 'Select a snapshot to review',
     helpDescription: 'Work through a review without the mouse.',

@@ -111,6 +111,10 @@ export interface Snapshot {
   id: string;
   runId: string;
   name: string;
+  /** Browser the screenshot was taken with, e.g. "chromium" — empty if the adapter didn't say */
+  browser: string;
+  /** Viewport, e.g. "1280x720" — empty if the adapter didn't say */
+  viewport: string;
   status: SnapshotStatus;
   baselineId: string | null;
   diffScore: number | null;
@@ -129,7 +133,7 @@ export interface Snapshot {
   /** Who accepted or rejected the change, and when */
   reviewedBy: string | null;
   reviewedAt: string | null;
-  /** Current review settings of this snapshot name (project and suite) */
+  /** Current review settings of this snapshot name and viewport (project and suite) */
   settings: SnapshotSettings;
   commentCount: number;
 }
@@ -576,4 +580,15 @@ export interface RetentionResult {
   runsDeleted: number;
   snapshotsDeleted: number;
   bytesFreed: number;
+}
+
+/**
+ * Browser and viewport of a screenshot. With the name they identify a
+ * snapshot: each variant has its own baseline.
+ */
+export interface SnapshotVariant {
+  /** e.g. "chromium", "firefox", "webkit" */
+  browser?: string;
+  /** "<width>x<height>", e.g. "1280x720" */
+  viewport?: string;
 }
