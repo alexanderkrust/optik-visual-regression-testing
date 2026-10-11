@@ -51,6 +51,10 @@
     rejected: { label: m.review.status.rejected, variant: 'destructive' },
   };
 
+  const viewportWidth = (s: Snapshot) => Number(s.viewport.split('x')[0]) || 0;
+  /** "firefox · 375×667" — empty for snapshots without a browser or viewport */
+  const variantLabel = (s: Snapshot) => [s.browser, s.viewport.replace('x', '×')].filter(Boolean).join(' · ');
+
   /** Snapshots that differ from their baseline — the only ones that can be reviewed. */
   const isChange = (s: Snapshot) => ['pending', 'approved', 'rejected'].includes(s.status);
 
@@ -73,7 +77,15 @@
   const VIEW_KEY = 'optik.review.view';
 
   let snapshots = $state(
-    untrack(() => [...data.snapshots].sort((a, b) => ORDER[a.status] - ORDER[b.status])),
+    untrack(() =>
+      [...data.snapshots].sort(
+        (a, b) =>
+          ORDER[a.status] - ORDER[b.status] ||
+          a.name.localeCompare(b.name) ||
+          a.browser.localeCompare(b.browser) ||
+          viewportWidth(a) - viewportWidth(b),
+      ),
+    ),
   );
   let selectedId = $state<string | null>(
     untrack(
@@ -100,6 +112,14 @@
   let settingsError = $state<string | null>(null);
 
   const selected = $derived(snapshots.find((s) => s.id === selectedId) ?? null);
+  // The other browsers and viewports of the selected snapshot in this run
+  const variants = $derived(
+    selected
+      ? snapshots
+          .filter((s) => s.name === selected.name)
+          .sort((a, b) => a.browser.localeCompare(b.browser) || viewportWidth(a) - viewportWidth(b))
+      : [],
+  );
   const pending = $derived(snapshots.filter((s) => s.status === 'pending'));
   const changed = $derived(snapshots.filter(isChange).length);
   // Changes, and unchanged snapshots that differ within their threshold, have a diff
@@ -354,7 +374,10 @@
             ? 'border-primary bg-primary/5 text-foreground'
             : 'border-transparent bg-transparent hover:bg-muted text-muted-foreground hover:text-foreground'}"
       >
-        <div class="font-medium truncate mb-1">{snapshot.name}</div>
+        <div class="font-medium truncate {variantLabel(snapshot) ? '' : 'mb-1'}">{snapshot.name}</div>
+        {#if variantLabel(snapshot)}
+          <div class="text-[11px] text-muted-foreground truncate mb-1">{variantLabel(snapshot)}</div>
+        {/if}
         <div class="flex items-center justify-between gap-2">
           <Badge variant={STATUS[snapshot.status].variant} class="text-[10px] px-1.5 py-0">
             {STATUS[snapshot.status].label}
@@ -384,7 +407,12 @@
     <div class="flex-1 min-w-0">
       <div class="flex items-start justify-between mb-4 gap-4">
         <div class="min-w-0">
-          <h2 class="text-lg font-semibold truncate">{selected.name}</h2>
+          <h2 class="text-lg font-semibold truncate">
+            {selected.name}
+            {#if variantLabel(selected)}
+              <span class="ml-1 text-sm font-normal text-muted-foreground">{variantLabel(selected)}</span>
+            {/if}
+          </h2>
           <p class="text-muted-foreground text-sm mt-0.5">
             {#if selected.autoApprovedFromId}
               {m.review.pixelsChanged(f.percent(selected.diffScore, 3))} · {m.review.autoApproved}
@@ -444,6 +472,31 @@
         </div>
       </div>
 
+      {#if variants.length > 1}
+        <div class="-mt-2 mb-4 flex flex-wrap gap-1" role="group" aria-label={m.review.variants}>
+          {#each variants as variant (variant.id)}
+            <Button
+              variant={variant.id === selected.id ? 'secondary' : 'ghost'}
+              size="sm"
+              class="h-7 gap-1.5 px-2 text-xs"
+              aria-pressed={variant.id === selected.id}
+              onclick={() => select(variant)}
+            >
+              <span
+                class="h-1.5 w-1.5 rounded-full {variant.status === 'pending'
+                  ? 'bg-yellow-500'
+                  : variant.status === 'rejected'
+                    ? 'bg-destructive'
+                    : 'bg-muted-foreground/40'}"
+                aria-hidden="true"
+              ></span>
+              {variantLabel(variant)}
+              <span class="sr-only">({STATUS[variant.status].label})</span>
+            </Button>
+          {/each}
+        </div>
+      {/if}
+
       <!-- Toolbar -->
       <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div class="flex items-center gap-1" role="group" aria-label={m.review.view}>
@@ -489,6 +542,7 @@
           <p class="mb-3">
             {m.review.editHint1} <strong>{selected.name}</strong> {m.review.editHint2}
             <span class="font-mono">{data.run.suite}</span>{m.review.editHint3}
+            {#if selected.viewport}{m.review.editHintViewport(selected.viewport.replace('x', '×'))}{/if}
           </p>
           <div class="flex flex-wrap items-end gap-3">
             <div class="flex flex-col gap-1">

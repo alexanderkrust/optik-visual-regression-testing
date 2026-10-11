@@ -38,13 +38,17 @@ export function optik(config: OptikConfig) {
               // Called from the browser by optikSnapshot / toMatchVisualSnapshot.
               // Runs in Node, where the token and run id are available.
               optikSubmit: (
-                _ctx: unknown,
+                ctx: { project?: { config?: { browser?: { name?: string } } } },
                 name: string,
                 base64: string,
-                options: { trim?: boolean } = {},
+                options: { trim?: boolean; viewport?: string } = {},
               ) => {
                 const image = Buffer.from(base64, "base64")
-                return submitScreenshot(name, options.trim ? trimRightBottom(image) : image)
+                // Each browser instance and viewport has its own baseline
+                return submitScreenshot(name, options.trim ? trimRightBottom(image) : image, {
+                  browser: ctx.project?.config?.browser?.name,
+                  viewport: options.viewport,
+                })
               },
             },
           },

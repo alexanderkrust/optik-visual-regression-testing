@@ -18,8 +18,8 @@ const POLICY = { type: 'anonymous' as const, id: null, label: 'Retention policy'
 
 /**
  * Removes runs older than a project's retention period, with their images —
- * but never a baseline: the newest accepted snapshot per suite, branch and
- * name stays, and so does every baseline a newer run compares against.
+ * but never a baseline: the newest accepted snapshot per suite, branch, name
+ * and variant stays, and so does every baseline a newer run compares against.
  */
 @Injectable()
 export class RetentionService implements OnModuleInit {
@@ -87,12 +87,12 @@ export class RetentionService implements OnModuleInit {
 
     const protectedIds = new Set(
       [
-        // The current baseline of every suite, branch and name
+        // The current baseline of every suite, branch, name and variant
         ...(await this.prisma.$queryRaw<{ id: string }[]>`
-          SELECT DISTINCT ON (r.suite, r.branch, s.name) s.id
+          SELECT DISTINCT ON (r.suite, r.branch, s.name, s.browser, s.viewport) s.id
           FROM snapshots s JOIN runs r ON r.id = s.run_id
           WHERE r.project_id = ${project.id} AND s.status IN ('new', 'approved')
-          ORDER BY r.suite, r.branch, s.name, s.created_at DESC`),
+          ORDER BY r.suite, r.branch, s.name, s.browser, s.viewport, s.created_at DESC`),
         // Baselines that runs inside the retention period compare against
         ...(await this.prisma.$queryRaw<{ id: string }[]>`
           SELECT DISTINCT s.baseline_id AS id

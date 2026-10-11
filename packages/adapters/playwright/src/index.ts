@@ -86,7 +86,12 @@ export const test = base.extend<{ optik: OptikFixture }>({
       snapshot: async (name: string) => {
         const screenshot = await page.screenshot({ fullPage: true })
         const optik = client()
-        const result = await optik.submit(runId, name, screenshot)
+        // Each browser and viewport (Playwright project) has its own baseline
+        const size = page.viewportSize()
+        const result = await optik.submit(runId, name, screenshot, {
+          browser: page.context().browser()?.browserType().name(),
+          viewport: size ? `${size.width}x${size.height}` : undefined,
+        })
         // The adapter option wins, then the server's decision (project setting)
         const override = process.env._OPTIK_FAIL_ON_CHANGES
         if (shouldFail(result, override === undefined ? undefined : override === "true")) {

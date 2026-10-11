@@ -1,10 +1,13 @@
 import { readdir, readFile, stat } from 'fs/promises';
 import { join, relative, sep } from 'path';
+import type { SnapshotVariant } from '@optik/shared';
 import { pool, withRun, type RunOptions, type RunResult } from './run';
 
 export interface UploadOptions extends RunOptions {
   /** Parallel uploads */
   concurrency?: number;
+  /** Browser and viewport of all screenshots, if they were taken with one */
+  variant?: SnapshotVariant;
 }
 
 /**
@@ -45,6 +48,6 @@ async function walk(dir: string): Promise<string[]> {
 /** Starts a run, uploads the screenshots and completes the run. */
 export function upload(screenshots: { name: string; file: string }[], options: UploadOptions): Promise<RunResult> {
   return withRun(options, `${screenshots.length} screenshots`, (submit) =>
-    pool(screenshots, options.concurrency ?? 4, async ({ name, file }) => submit(name, await readFile(file))),
+    pool(screenshots, options.concurrency ?? 4, async ({ name, file }) => submit(name, await readFile(file), options.variant)),
   );
 }

@@ -55,7 +55,12 @@ export class SnapshotsController {
 
   @Post()
   @UseGuards(TokenGuard)
-  @ApiOperation({ summary: 'Submit a screenshot' })
+  @ApiOperation({
+    summary: 'Submit a screenshot',
+    description:
+      'multipart/form-data with runId, name, file (PNG) and optionally browser ("chromium") and viewport ("1280x720"). ' +
+      'Name, browser and viewport identify a snapshot; each variant has its own baseline.',
+  })
   @ApiConsumes('multipart/form-data')
   async create(@Req() req) {
     const parts = (req as any).parts() as AsyncIterable<any>;
@@ -83,6 +88,7 @@ export class SnapshotsController {
       fields['runId'],
       fields['name'],
       imageBuffer,
+      { browser: fields['browser'], viewport: fields['viewport'] },
     );
   }
 

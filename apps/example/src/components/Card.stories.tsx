@@ -6,6 +6,8 @@ const meta = {
   title: 'Components/Card',
   component: Card,
   args: { title: 'Visual review', description: 'Three snapshots changed in this run.' },
+  // Cards also appear on tablets: capture them in a third viewport
+  parameters: { optik: { viewports: ['375x667', '768x1024', '1280x720'] } },
 } satisfies Meta<typeof Card>
 
 export default meta

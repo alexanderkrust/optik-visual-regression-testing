@@ -9,7 +9,7 @@ declare module "vitest/browser" {
     optikSubmit: (
       name: string,
       base64: string,
-      options?: { trim?: boolean },
+      options?: { trim?: boolean; viewport?: string },
     ) => Promise<SnapshotResult>
   }
 }
@@ -31,6 +31,9 @@ async function capture(target?: Screenshottable): Promise<string> {
   }
   return page.screenshot({ save: false, element: target as Locator | Element })
 }
+
+/** The tester's viewport — tests may change it with page.viewport() */
+const viewport = () => `${window.innerWidth}x${window.innerHeight}`
 
 function toBase64(bytes: Uint8Array): string {
   let binary = ""
@@ -69,7 +72,7 @@ export const toMatchSnapshot = {
         received instanceof Uint8Array
           ? toBase64(received)
           : await capture(received)
-      const result = await commands.optikSubmit(snapshotName, base64)
+      const result = await commands.optikSubmit(snapshotName, base64, { viewport: viewport() })
 
       if (result.failTest) {
         return { pass: false, message: () => changeMessage(snapshotName, result) }
@@ -123,6 +126,7 @@ export async function optikSnapshot(
   const target = element ?? renderedContent()
   const result = await commands.optikSubmit(name, await capture(target), {
     trim: !element,
+    viewport: viewport(),
   })
 
   if (result.failTest) {

@@ -30,7 +30,9 @@ function fakeServer(statuses) {
     if (req.url === '/api/runs') return json(201, run);
     if (req.url === '/api/runs/run-1/complete') return json(200, run);
     if (req.url === '/api/snapshots') {
-      const name = /name="name"\r\n\r\n([^\r]*)/.exec(body)[1];
+      const field = (key) => new RegExp(`name="${key}"\\r\\n\\r\\n([^\\r]*)`).exec(body)?.[1] ?? '';
+      const name = field('name');
+      requests.at(-1).variant = { browser: field('browser'), viewport: field('viewport') };
       const status = statuses[name] ?? 'unchanged';
       return json(201, { name, status, diffScore: 0.0123, failTest: status === 'pending', reviewPath: `/app/run-1?snapshot=${name}` });
     }
@@ -92,6 +94,18 @@ test('exits with 1 when snapshots changed and the project fails tests', async ()
   assert.equal(code, 1);
   assert.match(output, /● changed\s+login 1\.23%/);
   assert.match(output, /2 snapshots: 1 to review, 1 new/);
+});
+
+test('sends the browser and viewport of uploaded screenshots', async () => {
+  const { code, requests, output } = await run(['upload', join(dir, 'shots'), '--browser', 'firefox', '--viewport', '375x667']);
+  assert.equal(code, 0);
+  const uploads = requests.filter((r) => r.url === '/api/snapshots');
+  assert.deepEqual(uploads.map((r) => r.variant), [
+    { browser: 'firefox', viewport: '375x667' },
+    { browser: 'firefox', viewport: '375x667' },
+  ]);
+  assert.match(output, /home\/desktop \[firefox 375x667\]/);
+  assert.equal((await run(['upload', join(dir, 'shots'), '--viewport', 'wide'])).code, 2);
 });
 
 test('--no-fail-on-changes exits with 0 despite changes', async () => {

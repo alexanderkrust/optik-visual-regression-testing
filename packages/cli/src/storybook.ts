@@ -3,7 +3,7 @@ import { stat } from 'fs/promises';
 import { createServer, type Server } from 'http';
 import { extname, join, normalize, resolve, sep } from 'path';
 import type { Browser, BrowserContext, Page } from 'playwright';
-import { pool, withRun, type RunOptions, type RunResult } from './run';
+import { label, pool, withRun, type RunOptions, type RunResult } from './run';
 
 export interface Story {
   id: string;
@@ -19,13 +19,28 @@ export interface OptikParameters {
   delay?: number;
   /** Capture the whole page instead of the story's root element (e.g. for modals rendered in a portal) */
   fullPage?: boolean;
+  /**
+   * Viewports for this story instead of the CLI's — "375x667", or a width in
+   * pixels (with the height of the first CLI viewport)
+   */
+  viewports?: (string | number)[];
+}
+
+export type BrowserName = 'chromium' | 'firefox' | 'webkit';
+export const BROWSERS: BrowserName[] = ['chromium', 'firefox', 'webkit'];
+
+export interface Viewport {
+  width: number;
+  height: number;
 }
 
 export interface StorybookOptions extends RunOptions {
-  /** Parallel browser pages */
+  /** Parallel browser pages (per browser) */
   concurrency?: number;
-  /** Browser viewport */
-  viewport?: { width: number; height: number };
+  /** Every story is captured in each browser (default: chromium) … */
+  browsers?: BrowserName[];
+  /** … and each viewport (default: 1280x720) */
+  viewports?: Viewport[];
   /** Per story, in milliseconds */
   timeout?: number;
 }
@@ -35,6 +50,15 @@ export interface StorybookResult extends RunResult {
   /** Stories that failed to render, with the reason */
   errors: { name: string; message: string }[];
 }
+
+/** "1280x720" → { width: 1280, height: 720 }; a number is a width with `height` */
+export function parseViewport(value: string | number, height = 720): Viewport | null {
+  if (typeof value === 'number') return Number.isInteger(value) && value > 0 ? { width: value, height } : null;
+  const match = /^\s*([1-9]\d{0,4})\s*x\s*([1-9]\d{0,4})\s*$/i.exec(value);
+  return match ? { width: Number(match[1]), height: Number(match[2]) } : null;
+}
+
+const viewportName = (v: Viewport) => `${v.width}x${v.height}`;
 
 /** "Components/Button" + "Primary" → "Components/Button/Primary" */
 export const snapshotName = (story: Story) => `${story.title}/${story.name}`;
@@ -194,11 +218,13 @@ async function settle(page: Page, delay: number) {
 /** Story parameters, with Chromatic's `disableSnapshot` and `delay` honoured for an easy switch. */
 export function optikParameters(parameters: Record<string, unknown>): OptikParameters {
   const optik = (parameters.optik ?? {}) as OptikParameters;
-  const chromatic = (parameters.chromatic ?? {}) as { disableSnapshot?: boolean; delay?: number };
+  const chromatic = (parameters.chromatic ?? {}) as { disableSnapshot?: boolean; delay?: number; viewports?: number[] };
+  const viewports = optik.viewports ?? chromatic.viewports;
   return {
     disable: optik.disable ?? chromatic.disableSnapshot ?? false,
     delay: optik.delay ?? chromatic.delay ?? 0,
     fullPage: optik.fullPage ?? parameters.layout === 'fullscreen',
+    ...(Array.isArray(viewports) && viewports.length > 0 ? { viewports } : {}),
   };
 }
 
@@ -209,76 +235,129 @@ function loadPlaywright(): typeof import('playwright') {
   } catch {
     throw new Error(
       'optik storybook needs Playwright to render the stories:\n' +
-        '  npm install -D playwright && npx playwright install chromium',
+        '  npm install -D playwright && npx playwright install chromium   (and firefox, webkit for --browsers)',
     );
   }
 }
 
-/** Renders every story of a Storybook at `baseUrl` and uploads a screenshot of each as one run. */
+interface Worker {
+  /** One page per browser, opened when first needed */
+  pages: Map<BrowserName, { context: BrowserContext; page: Page }>;
+}
+
+/**
+ * Renders every story of a Storybook at `baseUrl` — in each browser and
+ * viewport — and uploads a screenshot of each as one run.
+ */
 export async function captureStorybook(baseUrl: string, options: StorybookOptions): Promise<StorybookResult> {
   const log = options.log ?? (() => {});
   const stories = await listStories(baseUrl);
   const timeout = options.timeout ?? 30_000;
+  const browserNames = options.browsers?.length ? options.browsers : (['chromium'] as BrowserName[]);
+  const defaultViewports = options.viewports?.length ? options.viewports : [{ width: 1280, height: 720 }];
   const skipped: string[] = [];
   const errors: StorybookResult['errors'] = [];
 
-  const { chromium } = loadPlaywright();
-  const browser: Browser = await chromium.launch();
+  const playwright = loadPlaywright();
+  const browsers = new Map<BrowserName, Browser>();
   try {
-    const result = await withRun(options, `${stories.length} stories`, (submit) =>
-      pool<Story, { context: BrowserContext; page: Page }>(
-        stories,
-        options.concurrency ?? 4,
-        async (story, { page }) => {
+    for (const name of browserNames) browsers.set(name, await playwright[name].launch());
+
+    const openPage = async (worker: Worker, browserName: BrowserName) => {
+      let open = worker.pages.get(browserName);
+      if (!open) {
+        const context = await browsers.get(browserName)!.newContext({
+          viewport: defaultViewports[0],
+          deviceScaleFactor: 1,
+          reducedMotion: 'reduce',
+        });
+        await context.addInitScript(recordStoryEvents);
+        await context.addInitScript({
+          content: `addEventListener('DOMContentLoaded', () => {
+            const style = document.createElement('style');
+            style.textContent = ${JSON.stringify(STABLE_CSS)};
+            document.head.appendChild(style);
+          });`,
+        });
+        open = { context, page: await context.newPage() };
+        worker.pages.set(browserName, open);
+      }
+      return open.page;
+    };
+
+    const tasks = stories.flatMap((story) => browserNames.map((browser) => ({ story, browser })));
+    const describe = `${stories.length} stories × ${browserNames.join(', ')} × ${defaultViewports.map(viewportName).join(', ')}`;
+    const result = await withRun(options, describe, (submit) =>
+      pool<{ story: Story; browser: BrowserName }, Worker>(
+        tasks,
+        (options.concurrency ?? 4) * browserNames.length,
+        async ({ story, browser }, worker) => {
           const name = snapshotName(story);
-          const url = new URL(`iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story`, baseUrl);
-          await page.goto(url.href, { waitUntil: 'load', timeout });
-          const rendered = await waitForStory(page, story.id, timeout).catch(() => ({
-            parameters: {},
-            error: `Did not render within ${timeout / 1000} s`,
-          }));
-          if (rendered.error) {
-            errors.push({ name, message: rendered.error });
-            log(`  ✗ error     ${name}: ${rendered.error}`);
-            return;
-          }
+          const page = await openPage(worker, browser);
+          const url = new URL(`iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story`, baseUrl).href;
+          const render = async () => {
+            await page.goto(url, { waitUntil: 'load', timeout });
+            return waitForStory(page, story.id, timeout).catch(() => ({
+              parameters: {},
+              error: `Did not render within ${timeout / 1000} s`,
+            }));
+          };
+          const fail = (message: string, viewport?: Viewport) => {
+            const where = label(name, { browser, viewport: viewport && viewportName(viewport) });
+            errors.push({ name: where, message });
+            log(`  ✗ error     ${where}: ${message}`);
+          };
+
+          // The first render tells the story's parameters (and its viewports)
+          await page.setViewportSize(defaultViewports[0]);
+          let rendered = await render();
+          if (rendered.error) return fail(rendered.error);
           const params = optikParameters(rendered.parameters);
           if (params.disable) {
-            skipped.push(name);
-            log(`  – skipped   ${name}`);
+            if (browser === browserNames[0]) {
+              skipped.push(name);
+              log(`  – skipped   ${name}`);
+            }
             return;
           }
-          await settle(page, params.delay ?? 0);
-          const root = page.locator('#storybook-root, #root').first();
-          const box = params.fullPage ? null : await root.boundingBox().catch(() => null);
-          const png =
-            box && box.width > 0 && box.height > 0
-              ? await root.screenshot({ animations: 'disabled', caret: 'hide' })
-              : await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
-          await submit(name, png);
+          const viewports = params.viewports
+            ? params.viewports.map((v) => parseViewport(v, defaultViewports[0].height))
+            : defaultViewports;
+          if (viewports.some((v) => !v)) {
+            return fail(`invalid viewports parameter ${JSON.stringify(params.viewports)} — use "375x667" or widths`);
+          }
+
+          let current = defaultViewports[0];
+          for (const viewport of viewports as Viewport[]) {
+            // Render again in the new size, so script-driven layouts see it from the start
+            if (viewportName(viewport) !== viewportName(current)) {
+              await page.setViewportSize(viewport);
+              current = viewport;
+              rendered = await render();
+              if (rendered.error) {
+                fail(rendered.error, viewport);
+                continue;
+              }
+            }
+            await settle(page, params.delay ?? 0);
+            const root = page.locator('#storybook-root, #root').first();
+            const box = params.fullPage ? null : await root.boundingBox().catch(() => null);
+            const png =
+              box && box.width > 0 && box.height > 0
+                ? await root.screenshot({ animations: 'disabled', caret: 'hide' })
+                : await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
+            await submit(name, png, { browser, viewport: viewportName(viewport) });
+          }
         },
-        async () => {
-          const context = await browser.newContext({
-            viewport: options.viewport ?? { width: 1280, height: 720 },
-            deviceScaleFactor: 1,
-            reducedMotion: 'reduce',
-          });
-          await context.addInitScript(recordStoryEvents);
-          await context.addInitScript({
-            content: `addEventListener('DOMContentLoaded', () => {
-              const style = document.createElement('style');
-              style.textContent = ${JSON.stringify(STABLE_CSS)};
-              document.head.appendChild(style);
-            });`,
-          });
-          return { context, page: await context.newPage() };
+        async () => ({ pages: new Map() }),
+        async (worker) => {
+          for (const { context } of worker.pages.values()) await context.close();
         },
-        async ({ context }) => context.close(),
       ),
     );
     return { ...result, skipped: skipped.sort(), errors: errors.sort((a, b) => a.name.localeCompare(b.name)) };
   } finally {
-    await browser.close();
+    for (const browser of browsers.values()) await browser.close();
   }
 }
 

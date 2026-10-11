@@ -24,6 +24,7 @@ import type {
   Snapshot,
   SnapshotSettings,
   SnapshotStatus,
+  SnapshotVariant,
   SubmittedSnapshot,
   UpdateSnapshotStatusDto,
 } from '@optik/shared';
@@ -40,6 +41,11 @@ const BASELINE_STATUSES: SnapshotStatus[] = ['new', 'approved'];
 
 const DEFAULT_SETTINGS: SnapshotSettings = { ignoreRegions: [], threshold: 0 };
 const MAX_REGIONS = 50;
+
+/** A snapshot's identity within its project and suite */
+type Variant = { browser: string; viewport: string };
+const NO_VARIANT: Variant = { browser: '', viewport: '' };
+const settingsKey = (name: string, viewport: string) => `${name}\u0000${viewport}`;
 
 @Injectable()
 export class SnapshotsService {
@@ -66,8 +72,8 @@ export class SnapshotsService {
       include: WITH_REVIEWER,
       orderBy: { createdAt: 'asc' },
     });
-    const settings = await this.settingsFor(run.projectId, run.suite, rows.map((r) => r.name));
-    return rows.map((row) => this.toDto(row, settings.get(row.name)));
+    const settings = await this.settingsFor(run.projectId, run.suite, rows);
+    return rows.map((row) => this.toDto(row, settings(row)));
   }
 
   async findById(id: string): Promise<Snapshot> {
@@ -83,13 +89,18 @@ export class SnapshotsService {
    * - identical          → `unchanged` (image not stored — it equals the baseline)
    * - any pixel differs  → `pending` (needs review; adapters fail the test),
    *   unless the exact same image was already approved → `approved` automatically
+   *
+   * Name, browser and viewport identify a snapshot: each variant is compared
+   * with its own baseline.
    */
   async submit(
     projectId: string,
     runId: string,
     name: string,
     image: Buffer,
+    variantDto: SnapshotVariant = {},
   ): Promise<SubmittedSnapshot> {
+    const variant = validateVariant(variantDto);
     const run = await this.prisma.run.findUnique({
       where: { id: runId },
       select: {
@@ -106,7 +117,7 @@ export class SnapshotsService {
       throw new NotFoundException(`Run "${runId}" not found`);
     }
 
-    let baseline = await this.findBaseline(run, name);
+    let baseline = await this.findBaseline(run, name, variant);
 
     // A baseline whose image is gone (e.g. stored before the move to S3) can't be
     // compared against — treat the snapshot as new so it becomes the baseline.
@@ -117,7 +128,7 @@ export class SnapshotsService {
       : null;
     if (!baselineImage) baseline = null;
 
-    const settings = (await this.settingsFor(run.projectId, run.suite, [name])).get(name) ?? DEFAULT_SETTINGS;
+    const settings = (await this.settingsFor(run.projectId, run.suite, [{ name, ...variant }]))({ name, ...variant });
 
     // Decoding, hashing and diffing run in a worker thread (see DiffService)
     let analysis: Awaited<ReturnType<DiffService['analyse']>>;
@@ -151,13 +162,14 @@ export class SnapshotsService {
     // E.g. after a squash merge: the change was reviewed on its branch, but the
     // new commit on the default branch has no history linking it to that review.
     const approvedTwin =
-      status === 'pending' ? await this.findApprovedTwin(run, name, imageHash) : null;
+      status === 'pending' ? await this.findApprovedTwin(run, name, variant, imageHash) : null;
     if (approvedTwin) status = 'approved';
 
     const snapshot = await this.prisma.snapshot.create({
       data: {
         runId,
         name,
+        ...variant,
         status,
         diffScore,
         imageHash,
@@ -195,46 +207,51 @@ export class SnapshotsService {
    *    detected) — e.g. the first run of a new branch.
    *
    * All of this within the run's suite first, then in the "default" suite of
-   * runs from before suites existed.
+   * runs from before suites existed — and for the snapshot's browser and
+   * viewport first, then without a variant: snapshots from before adapters
+   * sent them, so existing baselines carry over.
    */
-  private async findBaseline(run: BaselineSearchRun, name: string) {
+  private async findBaseline(run: BaselineSearchRun, name: string, variant: Variant) {
     const suites = run.suite === DEFAULT_SUITE ? [DEFAULT_SUITE] : [run.suite, DEFAULT_SUITE];
     const mainline = [run.project.defaultBranch, UNKNOWN_BRANCH];
+    const variants = isEmpty(variant) ? [variant] : [variant, NO_VARIANT];
 
-    for (const suite of suites) {
-      const scopes: Prisma.RunWhereInput[] = [];
-      if (run.ancestors.length > 0) {
-        scopes.push({
-          OR: [
-            { commitSha: { in: run.ancestors } },
-            { ancestors: { isEmpty: true }, branch: { in: [run.branch, ...mainline] } },
-          ],
-        });
-      }
-      scopes.push({ branch: run.branch });
-      scopes.push({ branch: { in: mainline } });
+    const scopes: Prisma.RunWhereInput[] = [];
+    if (run.ancestors.length > 0) {
+      scopes.push({
+        OR: [
+          { commitSha: { in: run.ancestors } },
+          { ancestors: { isEmpty: true }, branch: { in: [run.branch, ...mainline] } },
+        ],
+      });
+    }
+    scopes.push({ branch: run.branch });
+    scopes.push({ branch: { in: mainline } });
 
-      for (const scope of scopes) {
-        const baseline = await this.prisma.snapshot.findFirst({
-          where: {
-            name,
-            status: { in: BASELINE_STATUSES },
-            run: { projectId: run.projectId, suite, ...scope },
-          },
-          orderBy: { createdAt: 'desc' },
-          select: { id: true, runId: true },
-        });
-        if (baseline) return baseline;
-      }
+    const searches = variants.flatMap((v) => suites.flatMap((suite) => scopes.map((scope) => ({ ...v, suite, scope }))));
+    for (const { browser, viewport, suite, scope } of searches) {
+      const baseline = await this.prisma.snapshot.findFirst({
+        where: {
+          name,
+          browser,
+          viewport,
+          status: { in: BASELINE_STATUSES },
+          run: { projectId: run.projectId, suite, ...scope },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, runId: true },
+      });
+      if (baseline) return baseline;
     }
     return null;
   }
 
-  /** An approved snapshot of this name with exactly the same pixels, if any. */
-  private findApprovedTwin(run: BaselineSearchRun, name: string, imageHash: string) {
+  /** An approved snapshot of this name and variant with exactly the same pixels, if any. */
+  private findApprovedTwin(run: BaselineSearchRun, name: string, variant: Variant, imageHash: string) {
     return this.prisma.snapshot.findFirst({
       where: {
         name,
+        ...variant,
         imageHash,
         status: 'approved',
         run: { projectId: run.projectId, suite: { in: [run.suite, DEFAULT_SUITE] } },
@@ -299,18 +316,19 @@ export class SnapshotsService {
     const settings = validateSettings(dto);
     const snapshot = await this.prisma.snapshot.findUniqueOrThrow({
       where: { id },
-      select: { name: true, run: { select: { projectId: true, suite: true } } },
+      select: { name: true, viewport: true, run: { select: { projectId: true, suite: true } } },
     });
     const { projectId, suite } = snapshot.run;
-    const name = snapshot.name;
+    const { name, viewport } = snapshot;
     await this.prisma.snapshotSetting.upsert({
-      where: { projectId_suite_name: { projectId, suite, name } },
-      create: { projectId, suite, name, ...settings, ignoreRegions: settings.ignoreRegions as object[] },
+      where: { projectId_suite_name_viewport: { projectId, suite, name, viewport } },
+      create: { projectId, suite, name, viewport, ...settings, ignoreRegions: settings.ignoreRegions as object[] },
       update: { ...settings, ignoreRegions: settings.ignoreRegions as object[] },
     });
 
+    // Every browser of this viewport
     const open = await this.prisma.snapshot.findMany({
-      where: { name, status: 'pending', baselineId: { not: null }, run: { projectId, suite } },
+      where: { name, viewport, status: 'pending', baselineId: { not: null }, run: { projectId, suite } },
       select: { id: true, runId: true, baselineId: true },
     });
     for (const change of open) await this.reevaluate(change, settings);
@@ -318,7 +336,12 @@ export class SnapshotsService {
       action: 'snapshot.settings_updated',
       project: { id: project.id, slug: project.slug },
       target: { type: 'snapshot', id, label: name },
-      details: { suite, ignoreRegions: settings.ignoreRegions.length, threshold: settings.threshold },
+      details: {
+        suite,
+        ...(viewport ? { viewport } : {}),
+        ignoreRegions: settings.ignoreRegions.length,
+        threshold: settings.threshold,
+      },
     });
 
     const row = await this.prisma.snapshot.findUniqueOrThrow({ where: { id }, include: WITH_REVIEWER });
@@ -346,17 +369,22 @@ export class SnapshotsService {
     await this.notifyIfReviewed(change.runId);
   }
 
-  /** Review settings per snapshot name, for the names that have any. */
-  private async settingsFor(projectId: string, suite: string, names: string[]) {
+  /**
+   * Review settings of snapshots, by name and viewport. A viewport without its
+   * own settings uses those saved without a viewport (before adapters sent one).
+   */
+  private async settingsFor(projectId: string, suite: string, snapshots: { name: string; viewport: string }[]) {
     const rows = await this.prisma.snapshotSetting.findMany({
-      where: { projectId, suite, name: { in: names } },
+      where: { projectId, suite, name: { in: [...new Set(snapshots.map((s) => s.name))] } },
     });
-    return new Map<string, SnapshotSettings>(
+    const byKey = new Map<string, SnapshotSettings>(
       rows.map((r) => [
-        r.name,
+        settingsKey(r.name, r.viewport),
         { ignoreRegions: r.ignoreRegions as unknown as IgnoreRegion[], threshold: r.threshold },
       ]),
     );
+    return ({ name, viewport }: { name: string; viewport: string }): SnapshotSettings =>
+      byKey.get(settingsKey(name, viewport)) ?? byKey.get(settingsKey(name, '')) ?? DEFAULT_SETTINGS;
   }
 
   private async dtoWithSettings(row: SnapshotRow): Promise<Snapshot> {
@@ -364,8 +392,8 @@ export class SnapshotsService {
       where: { id: row.runId },
       select: { projectId: true, suite: true },
     });
-    const settings = await this.settingsFor(run.projectId, run.suite, [row.name]);
-    return this.toDto(row, settings.get(row.name));
+    const settings = await this.settingsFor(run.projectId, run.suite, [row]);
+    return this.toDto(row, settings(row));
   }
 
   async getImageBuffer(id: string): Promise<Buffer> {
@@ -394,6 +422,8 @@ export class SnapshotsService {
       id: r.id,
       runId: r.runId,
       name: r.name,
+      browser: r.browser,
+      viewport: r.viewport,
       status: r.status as Snapshot['status'],
       baselineId: r.baselineId,
       diffScore: r.diffScore,
@@ -429,6 +459,21 @@ function hasOwnDiff(s: { status: string; diffScore: number | null }) {
 /** Whether a comparison counts as a change: a new size, or more changed pixels than allowed. */
 function exceeds(diff: { diffCount: number; diffScore: number; sizeChanged: boolean }, threshold: number) {
   return diff.sizeChanged || (diff.diffCount > 0 && diff.diffScore > threshold);
+}
+
+const isEmpty = (v: Variant) => !v.browser && !v.viewport;
+
+/** Browser: a short name like "chromium"; viewport: "<width>x<height>". Both optional. */
+function validateVariant(dto: SnapshotVariant): Variant {
+  const browser = (dto.browser ?? '').trim().toLowerCase();
+  const viewport = (dto.viewport ?? '').trim().toLowerCase();
+  if (browser && !/^[a-z][a-z0-9._-]{0,31}$/.test(browser)) {
+    throw new BadRequestException('browser must be a short name like "chromium" (letters, digits, . _ -)');
+  }
+  if (viewport && !/^[1-9]\d{0,4}x[1-9]\d{0,4}$/.test(viewport)) {
+    throw new BadRequestException('viewport must look like "1280x720"');
+  }
+  return { browser, viewport };
 }
 
 function validateSettings(dto: SnapshotSettings): SnapshotSettings {
