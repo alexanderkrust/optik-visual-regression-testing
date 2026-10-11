@@ -4,6 +4,8 @@ import { shouldFail } from "@optik/core"
 import { client } from "./client.js"
 
 export { expect } from "@playwright/test"
+// Spread into `use`: connectOptions: rendererConnectOptions() — pinned browsers when OPTIK_RENDERER is set
+export { rendererConnectOptions } from "@optik/core"
 
 // ------------------------------------------------------------------ config
 

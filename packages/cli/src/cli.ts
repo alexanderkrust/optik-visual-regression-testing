@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'util';
 import type { RunResult } from './run';
+import { startRenderer, type Renderer } from './renderer';
 import { BROWSERS, parseViewport, storybook, type BrowserName } from './storybook';
 import { collectScreenshots, upload } from './upload';
 
@@ -26,6 +27,9 @@ Options:
   --browsers <list>       storybook: chromium, firefox and/or webkit (default: chromium)
   --viewports <list>      storybook: e.g. 375x667,1280x720 (default: 1280x720)
   --timeout <seconds>     storybook: time a story may take to render (default: 30)
+  --renderer <ws-url>     storybook: use the browsers of an optik-renderer container
+                          (default: OPTIK_RENDERER) for identical screenshots everywhere
+  --docker                storybook: start the optik-renderer container for this run
 
 Name, browser and viewport identify a snapshot: each combination has its own baseline.
   -h, --help              Show this help
@@ -34,6 +38,8 @@ Name, browser and viewport identify a snapshot: each combination has its own bas
 Environment:
   OPTIK_TOKEN             Project API token (optik_...) — required
   OPTIK_SERVER_URL        optik server
+  OPTIK_RENDERER          WebSocket URL of an optik-renderer container (see --renderer)
+  OPTIK_RENDERER_IMAGE    Image for --docker (default: ghcr.io/alexanderkrust/optik-renderer:<Playwright version>)
   OPTIK_BRANCH, OPTIK_COMMIT  Override the branch and commit detected from git or CI
 
 Exit codes: 0 no changes to review (or not failing), 1 changes to review,
@@ -65,6 +71,8 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
       browsers: { type: 'string', default: 'chromium' },
       viewports: { type: 'string' },
       timeout: { type: 'string', default: '30' },
+      renderer: { type: 'string' },
+      docker: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
     },
@@ -123,13 +131,25 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
       console.error('Name one Storybook: optik storybook [storybook-static | url]');
       return 2;
     }
-    const result = await storybook(paths[0] ?? 'storybook-static', {
-      ...run,
-      suite: values.suite ?? 'storybook',
-      browsers: [...new Set(browsers)] as BrowserName[],
-      viewports: viewports as { width: number; height: number }[],
-      timeout: timeout * 1000,
-    });
+    if (values.docker && (values.renderer || env.OPTIK_RENDERER)) {
+      console.error('Use either --docker or --renderer / OPTIK_RENDERER');
+      return 2;
+    }
+    let container: Renderer | undefined;
+    if (values.docker) container = await startRenderer(env.OPTIK_RENDERER_IMAGE || undefined, run.log);
+    let result;
+    try {
+      result = await storybook(paths[0] ?? 'storybook-static', {
+        ...run,
+        suite: values.suite ?? 'storybook',
+        browsers: [...new Set(browsers)] as BrowserName[],
+        viewports: viewports as { width: number; height: number }[],
+        timeout: timeout * 1000,
+        renderer: container?.wsEndpoint ?? values.renderer ?? env.OPTIK_RENDERER,
+      });
+    } finally {
+      await container?.stop();
+    }
     summary(result, [
       [result.skipped.length, 'skipped'],
       [result.errors.length, 'failed to render'],
