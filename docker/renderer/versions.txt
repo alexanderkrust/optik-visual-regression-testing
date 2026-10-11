@@ -1,0 +1,5 @@
+# Playwright versions published as ghcr.io/<owner>/optik-renderer:<version>.
+# A published tag is never rebuilt — the same tag must render the same pixels
+# for as long as anyone uses it. Add the version optik itself uses when
+# upgrading Playwright; keep the old ones.
+1.59.1

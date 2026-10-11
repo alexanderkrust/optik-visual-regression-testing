@@ -117,6 +117,11 @@ test('reports a wrong token', async () => {
   await assert.rejects(run(['upload', join(dir, 'shots')], {}, { OPTIK_TOKEN: 'optik_wrong' }), /auth failed \(401\): Invalid token/);
 });
 
+test('storybook: --docker and a renderer URL exclude each other', async () => {
+  assert.equal((await run(['storybook', '--docker'], {}, { OPTIK_RENDERER: 'ws://127.0.0.1:3100/' })).code, 2);
+  assert.equal((await run(['storybook', '--docker', '--renderer', 'ws://127.0.0.1:3100/'])).code, 2);
+});
+
 test('needs a token and something to upload', async () => {
   assert.equal((await run(['upload', join(dir, 'shots')], {}, { OPTIK_TOKEN: '' })).code, 2);
   assert.equal((await run(['upload'])).code, 2);
