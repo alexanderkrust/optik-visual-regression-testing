@@ -127,11 +127,15 @@ export class ProjectsService {
     if (dto?.failTestsOnChanges !== undefined && typeof dto.failTestsOnChanges !== 'boolean') {
       throw new BadRequestException('failTestsOnChanges must be true or false');
     }
+    if (dto?.ignoreAntiAliasing !== undefined && typeof dto.ignoreAntiAliasing !== 'boolean') {
+      throw new BadRequestException('ignoreAntiAliasing must be true or false');
+    }
     const row = await this.prisma.project.update({
       where: { slug },
       data: {
         defaultBranch: branchName(dto?.defaultBranch),
         failTestsOnChanges: dto?.failTestsOnChanges,
+        ignoreAntiAliasing: dto?.ignoreAntiAliasing,
         ...ciSettings(project, dto ?? {}, (token) => this.secrets.encrypt(token)),
       },
     });
@@ -269,7 +273,7 @@ export class ProjectsService {
 /** Changed settings for the audit log — the CI token only as "set" or "removed". */
 function settingChanges(before: ProjectRow, after: ProjectRow) {
   const changes: Record<string, unknown> = {};
-  for (const key of ['defaultBranch', 'failTestsOnChanges', 'ciProvider', 'ciRepository', 'ciApiUrl'] as const) {
+  for (const key of ['defaultBranch', 'failTestsOnChanges', 'ignoreAntiAliasing', 'ciProvider', 'ciRepository', 'ciApiUrl'] as const) {
     if (before[key] !== after[key]) changes[key] = { from: before[key], to: after[key] };
   }
   if (before.ciTokenEncrypted !== after.ciTokenEncrypted) {
@@ -294,6 +298,7 @@ function toDto(r: ProjectRow, myRole: EffectiveProjectRole): Project {
     slug: r.slug,
     defaultBranch: r.defaultBranch,
     failTestsOnChanges: r.failTestsOnChanges,
+    ignoreAntiAliasing: r.ignoreAntiAliasing,
     ciProvider: r.ciProvider,
     ciRepository: r.ciRepository,
     ciApiUrl: r.ciApiUrl,

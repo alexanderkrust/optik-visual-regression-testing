@@ -67,6 +67,11 @@ export interface Project {
   defaultBranch: string;
   /** Adapters fail tests on visual changes (off when a commit status reports them) */
   failTestsOnChanges: boolean;
+  /**
+   * Changed anti-aliased (edge) pixels don't count as changes. Off by default;
+   * for screenshots whose edge blending varies between runs (no optik renderer).
+   */
+  ignoreAntiAliasing: boolean;
   /** CI system that gets commit statuses, if configured */
   ciProvider: CiProvider | null;
   /** Repository in the provider's format, see CiProvider */
@@ -203,6 +208,7 @@ export interface CreateProjectDto {
 export interface UpdateProjectDto {
   defaultBranch?: string;
   failTestsOnChanges?: boolean;
+  ignoreAntiAliasing?: boolean;
   /** Empty string turns commit statuses off */
   ciProvider?: CiProvider | '';
   ciRepository?: string;

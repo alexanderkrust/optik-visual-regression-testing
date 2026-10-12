@@ -2,8 +2,16 @@ import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 
 export interface DiffResult {
+  /** Changed pixels; includes `aaCount` unless anti-aliasing is ignored. */
   diffCount: number;
+  /** `diffCount` as a share of all pixels (0–1). */
   diffScore: number;
+  /**
+   * Changed pixels that look like anti-aliasing, i.e. blended edge pixels.
+   * Small geometry changes (a corner radius, a border moving by a fraction
+   * of a pixel) only alter these. Yellow in the diff image, other changes red.
+   */
+  aaCount: number;
   diffBuffer: Buffer;
   /** True when the images have different dimensions. */
   sizeChanged: boolean;
@@ -20,7 +28,17 @@ export interface Region {
 export interface DiffOptions {
   /** Areas whose changes are ignored, e.g. dates or animations. */
   ignoreRegions?: Region[];
+  /**
+   * Leave changed anti-aliased pixels out of `diffCount`, for screenshots
+   * from renderers whose edge blending varies between runs. Off by default:
+   * with deterministic rendering, they are real changes.
+   */
+  ignoreAntiAliasing?: boolean;
 }
+
+/** Diff image colors; grayscale background pixels can't take either. */
+const DIFF_COLOR: [number, number, number] = [255, 0, 0];
+const AA_COLOR: [number, number, number] = [255, 255, 0];
 
 /**
  * Compares two PNGs. Images of different size are padded to the larger
@@ -47,16 +65,30 @@ export function diffImages(baseline: PNG, current: PNG, options: DiffOptions = {
   if (regions.length > 0) b = copyRegions(a, b === current ? clone(b) : b, regions);
   const diff = new PNG({ width, height });
 
-  const diffCount = pixelmatch(a.data, b.data, diff.data, width, height, {
+  // pixelmatch only counts the other changes; it paints anti-aliased ones in AA_COLOR
+  const otherCount = pixelmatch(a.data, b.data, diff.data, width, height, {
     threshold: 0.1,
+    diffColor: DIFF_COLOR,
+    aaColor: AA_COLOR,
   });
+  const aaCount = countColor(diff, AA_COLOR);
+  const diffCount = options.ignoreAntiAliasing ? otherCount : otherCount + aaCount;
 
   const totalPixels = width * height;
   const diffScore = totalPixels > 0 ? diffCount / totalPixels : 0;
   tint(diff, regions);
   const diffBuffer = PNG.sync.write(diff);
 
-  return { diffCount, diffScore, diffBuffer, sizeChanged };
+  return { diffCount, diffScore, aaCount, diffBuffer, sizeChanged };
+}
+
+function countColor(image: PNG, [r, g, b]: [number, number, number]): number {
+  let count = 0;
+  const { data } = image;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i] === r && data[i + 1] === g && data[i + 2] === b) count++;
+  }
+  return count;
 }
 
 function pad(image: PNG, width: number, height: number): PNG {

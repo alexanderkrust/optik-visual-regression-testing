@@ -6,6 +6,8 @@ export interface AnalyseInput {
   baseline: Uint8Array | null;
   /** Areas whose changes don't count */
   ignoreRegions?: Region[];
+  /** Leave changed anti-aliased pixels out (project setting) */
+  ignoreAntiAliasing?: boolean;
 }
 
 export interface AnalyseResult {
@@ -15,6 +17,8 @@ export interface AnalyseResult {
   diff: {
     diffCount: number;
     diffScore: number;
+    /** Changed anti-aliased pixels; part of diffCount unless ignored */
+    aaCount: number;
     sizeChanged: boolean;
     diffImage: Uint8Array;
   } | null;
@@ -27,17 +31,21 @@ const toBuffer = (data: Uint8Array) => Buffer.from(data.buffer, data.byteOffset,
  * pixels and compare it with the baseline. Runs in a worker thread (see
  * DiffService); throws for images that are not valid PNGs.
  */
-export function analyse({ image, baseline, ignoreRegions }: AnalyseInput): AnalyseResult {
+export function analyse({ image, baseline, ignoreRegions, ignoreAntiAliasing }: AnalyseInput): AnalyseResult {
   const current = PNG.sync.read(toBuffer(image));
   const imageHash = hashImage(current);
   if (!baseline) return { imageHash, diff: null };
 
-  const result = diffImages(PNG.sync.read(toBuffer(baseline)), current, { ignoreRegions });
+  const result = diffImages(PNG.sync.read(toBuffer(baseline)), current, {
+    ignoreRegions,
+    ignoreAntiAliasing,
+  });
   return {
     imageHash,
     diff: {
       diffCount: result.diffCount,
       diffScore: result.diffScore,
+      aaCount: result.aaCount,
       sizeChanged: result.sizeChanged,
       diffImage: result.diffBuffer,
     },

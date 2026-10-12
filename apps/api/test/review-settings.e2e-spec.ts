@@ -17,6 +17,33 @@ function withBlock(x: number, y: number, width: number, height: number): Buffer 
   return PNG.sync.write(image);
 }
 
+/**
+ * A white 40×24 PNG with an indigo, anti-aliased rounded rectangle, like a
+ * button: edge pixels are blended by their coverage (4×4 supersampling).
+ */
+function roundedRect(radius: number): Buffer {
+  const [width, height, inset] = [40, 24, 4];
+  const image = new PNG({ width, height });
+  const [left, top, right, bottom] = [inset, inset, width - inset, height - inset];
+  const inside = (x: number, y: number) => {
+    if (x < left || x > right || y < top || y > bottom) return false;
+    const cx = Math.min(Math.max(x, left + radius), right - radius);
+    const cy = Math.min(Math.max(y, top + radius), bottom - radius);
+    return (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2;
+  };
+  const indigo = [99, 102, 241];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let hits = 0;
+      for (let s = 0; s < 16; s++) if (inside(x + ((s % 4) + 0.5) / 4, y + (Math.floor(s / 4) + 0.5) / 4)) hits++;
+      const i = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) image.data[i + c] = Math.round(255 + ((indigo[c] - 255) * hits) / 16);
+      image.data[i + 3] = 255;
+    }
+  }
+  return PNG.sync.write(image);
+}
+
 describe('ignore regions, thresholds and comments', () => {
   let t: TestApp;
   let admin: AdminClient;
@@ -132,6 +159,58 @@ describe('ignore regions, thresholds and comments', () => {
       const status = Object.fromEntries(snapshots.map((s: any) => [s.name, s.status]));
       expect(status).toEqual({ Button: 'unchanged', Card: 'pending' });
       expect((await snapshot(withBlock(0, 0, 2, 2), 'playwright')).status).toBe('pending');
+    });
+  });
+
+  // A corner radius change (6px → 8px) only alters blended edge pixels
+  describe('anti-aliasing', () => {
+    const configure = (settings: object) =>
+      call(`${t.api}/projects/shop`, { method: 'PATCH', token: admin.jwt, json: settings });
+
+    it('counts changed edge pixels and shows them in the diff image', async () => {
+      await snapshot(roundedRect(6));
+      const changed = await snapshot(roundedRect(8));
+      expect(changed.status).toBe('pending');
+      expect(changed.diffScore).toBeGreaterThan(0);
+
+      const diff = PNG.sync.read((await call(`${t.api}/snapshots/${changed.id}/diff`, { token: admin.jwt })).body);
+      let yellow = 0;
+      for (let i = 0; i < diff.data.length; i += 4) {
+        if (diff.data[i] === 255 && diff.data[i + 1] === 255 && diff.data[i + 2] === 0) yellow++;
+      }
+      expect(yellow / (40 * 24)).toBeCloseTo(changed.diffScore, 10);
+    });
+
+    it('can be ignored per project', async () => {
+      expect((await call(`${t.api}/projects/shop`, { token: admin.jwt })).body.ignoreAntiAliasing).toBe(false);
+      const res = await configure({ ignoreAntiAliasing: true });
+      expect(res.body.ignoreAntiAliasing).toBe(true);
+
+      await snapshot(roundedRect(6));
+      const changed = await snapshot(roundedRect(8));
+      expect(changed).toMatchObject({ status: 'unchanged', diffScore: 0, diffUrl: null });
+      // Other changes still count
+      expect((await snapshot(withBlock(0, 0, 2, 2))).status).toBe('pending');
+    });
+
+    it('resolves open edge-only changes when review settings are saved after turning it on', async () => {
+      await snapshot(roundedRect(6));
+      const changed = await snapshot(roundedRect(8));
+      expect(changed.status).toBe('pending');
+
+      await configure({ ignoreAntiAliasing: true });
+      const res = await setSettings(changed.id, { ignoreRegions: [], threshold: 0 });
+      expect(res.body.status).toBe('unchanged');
+    });
+
+    it('is covered by the threshold', async () => {
+      const first = await snapshot(roundedRect(6));
+      await setSettings(first.id, { ignoreRegions: [], threshold: 0.2 });
+      expect((await snapshot(roundedRect(8))).status).toBe('unchanged');
+    });
+
+    it('rejects values that are not booleans', async () => {
+      expect((await configure({ ignoreAntiAliasing: 'yes' })).status).toBe(400);
     });
   });
 

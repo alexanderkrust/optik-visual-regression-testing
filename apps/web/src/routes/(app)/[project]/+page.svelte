@@ -638,6 +638,13 @@
               </span>
             </span>
           </label>
+          <label class="flex items-start gap-2 text-sm">
+            <input type="checkbox" name="ignoreAntiAliasing" checked={data.project.ignoreAntiAliasing} class="mt-1" />
+            <span>
+              {t.ignoreAntiAliasing}
+              <span class="block text-xs text-muted-foreground">{t.ignoreAntiAliasingHint}</span>
+            </span>
+          </label>
           {#if form && 'settingsError' in form}
             <p class="text-sm text-destructive">{(form as { settingsError: string }).settingsError}</p>
           {:else if form && 'settingsSaved' in form}
