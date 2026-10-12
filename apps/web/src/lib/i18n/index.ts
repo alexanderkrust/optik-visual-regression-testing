@@ -67,7 +67,8 @@ export function formatters(locale: Locale) {
 
 export type I18n = { locale: Locale; m: Messages; f: ReturnType<typeof formatters> };
 
-const KEY = Symbol('i18n');
+// Symbol.for: the same key even when the dev server loads this module twice after a hot update
+const KEY = Symbol.for('optik.i18n');
 
 /** Called by the layouts with the request's language. */
 export function provideI18n(locale: () => Locale) {
