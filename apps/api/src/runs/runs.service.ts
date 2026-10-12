@@ -7,7 +7,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService } from '../storage/storage.service';
 import { MetricsService } from '../observability/metrics.service';
 import { diffKey, imageKey } from '../snapshots/storage-keys';
-import type { Run, CreateRunDto } from '@optik/shared';
+import type { CompleteRunDto, CreateRunDto, Run, TurboSnapBase, TurboSnapBaseDto } from '@optik/shared';
 import type { Run as PrismaRun, Snapshot as PrismaSnapshot } from '@prisma/client';
 
 /** Snapshot statuses that mean the run had a visual change. */
@@ -19,6 +19,7 @@ export const DEFAULT_SUITE = 'default';
 const SUITE_PATTERN = /^[A-Za-z0-9._/-]{1,64}$/;
 const COMMIT_PATTERN = /^[0-9a-f]{7,64}$/i;
 const MAX_ANCESTORS = 1000;
+const CAPTURE_KEY_MAX = 500;
 
 const INCLUDE = {
   project: { select: { slug: true } },
@@ -113,7 +114,8 @@ export class RunsService {
    * either: the new run is deleted and the previous one gets a bumped
    * `updatedAt`, `runCount` and `lastCommitSha`. Returns the run that remains.
    */
-  async complete(projectId: string, id: string): Promise<Run> {
+  async complete(projectId: string, id: string, dto: CompleteRunDto = {}): Promise<Run> {
+    const captureKey = validCaptureKey(dto?.captureKey, false);
     const run = await this.prisma.run.findUnique({ where: { id }, include: INCLUDE });
     // A token may only complete runs of its own project; don't reveal others
     if (!run || run.projectId !== projectId) {
@@ -137,7 +139,9 @@ export class RunsService {
         this.prisma.run.delete({ where: { id } }),
         this.prisma.run.update({
           where: { id: target.id },
-          data: { runCount: { increment: 1 }, lastCommitSha: run.commitSha },
+          // The remaining run now stands for this commit too — with this run's
+          // capture settings, or none if it had errors (see turboSnapBase)
+          data: { runCount: { increment: 1 }, lastCommitSha: run.commitSha, captureKey },
           include: INCLUDE,
         }),
       ]);
@@ -147,13 +151,52 @@ export class RunsService {
 
     const row = await this.prisma.run.update({
       where: { id },
-      data: { status: 'complete' },
+      data: { status: 'complete', captureKey },
       include: INCLUDE,
     });
     await this.commitStatus.reportRun(id);
     const completed = toDto(row);
     if (completed.pendingCount > 0) await this.notifications.notifyRun(id, 'run.needs_review');
     return completed;
+  }
+
+  /**
+   * The commit TurboSnap compares against: of the runs on the given commits
+   * (newest first) in this suite, the first that completed with the same
+   * capture settings — which the client only reports when nothing failed —
+   * and has no open or rejected changes. Stories the changes since then can't
+   * affect keep their baselines; an open change must not be skipped.
+   */
+  async turboSnapBase(projectId: string, dto: TurboSnapBaseDto): Promise<TurboSnapBase> {
+    const suite = dto?.suite?.trim() || DEFAULT_SUITE;
+    const captureKey = validCaptureKey(dto?.captureKey, true)!;
+    const ancestors = dto?.ancestors;
+    if (
+      !Array.isArray(ancestors) ||
+      ancestors.length > MAX_ANCESTORS ||
+      !ancestors.every((sha) => typeof sha === 'string' && COMMIT_PATTERN.test(sha))
+    ) {
+      throw new BadRequestException(`ancestors must be up to ${MAX_ANCESTORS} commit SHAs`);
+    }
+    const runs = await this.prisma.run.findMany({
+      where: {
+        projectId,
+        suite,
+        captureKey,
+        status: 'complete',
+        OR: [{ commitSha: { in: ancestors } }, { lastCommitSha: { in: ancestors } }],
+        snapshots: { none: { status: { in: ['pending', 'rejected'] } } },
+      },
+      select: { id: true, commitSha: true, lastCommitSha: true },
+    });
+    // A merged run stands for its first and its last commit
+    const byCommit = new Map<string, string>();
+    for (const run of runs) {
+      byCommit.set(run.commitSha, run.id);
+      if (run.lastCommitSha) byCommit.set(run.lastCommitSha, run.id);
+    }
+    const commitSha = ancestors.find((sha) => byCommit.has(sha)) ?? null;
+    return { commitSha, runId: commitSha ? byCommit.get(commitSha)! : null };
   }
 
   private async findMergeTarget(run: RunWithCounts) {
@@ -177,6 +220,18 @@ export class RunsService {
       !previous.snapshots.some((s) => CHANGE_STATUSES.includes(s.status));
     return previousIsClean ? previous : null;
   }
+}
+
+/** Capture settings as the client describes them — opaque, printable, bounded. */
+function validCaptureKey(value: unknown, required: boolean): string | null {
+  if (value === undefined || value === null || value === '') {
+    if (required) throw new BadRequestException('captureKey is required');
+    return null;
+  }
+  if (typeof value !== 'string' || value.length > CAPTURE_KEY_MAX || !/^[\x20-\x7e]+$/.test(value)) {
+    throw new BadRequestException(`captureKey must be printable ASCII, at most ${CAPTURE_KEY_MAX} characters`);
+  }
+  return value;
 }
 
 /** The optik URL the adapter used, if it is a plain http(s) URL. */

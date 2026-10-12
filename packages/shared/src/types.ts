@@ -598,3 +598,31 @@ export interface SnapshotVariant {
   /** "<width>x<height>", e.g. "1280x720" */
   viewport?: string;
 }
+
+/** Body of POST /runs/:id/complete (optional) */
+export interface CompleteRunDto {
+  /**
+   * The capture settings (browsers, viewports, renderer …), sent only when
+   * every snapshot was captured without errors. TurboSnap builds on such runs.
+   */
+  captureKey?: string;
+}
+
+/** Body of POST /runs/turbosnap-base */
+export interface TurboSnapBaseDto {
+  suite?: string;
+  /** The current commit and its ancestors, newest first */
+  ancestors: string[];
+  /** Capture settings of the coming run — the base must have the same */
+  captureKey: string;
+}
+
+/**
+ * The commit TurboSnap compares against: the newest run on one of the
+ * ancestors with the same capture settings, no open or rejected changes and
+ * no capture errors. Null when there is none — capture everything then.
+ */
+export interface TurboSnapBase {
+  commitSha: string | null;
+  runId: string | null;
+}

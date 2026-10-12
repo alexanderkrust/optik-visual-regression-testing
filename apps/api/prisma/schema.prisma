@@ -95,6 +95,10 @@ model Run {
   updatedAt     DateTime   @default(now()) @updatedAt @map("updated_at")
   runCount      Int        @default(1) @map("run_count")
   lastCommitSha String?    @map("last_commit_sha")
+  /// Capture settings (browsers, viewports, renderer) of a run that had no
+  /// errors, reported by the client on completion — TurboSnap only skips
+  /// stories relative to a run with the same settings
+  captureKey    String?    @map("capture_key")
   snapshots     Snapshot[]
 
   @@index([projectId, suite, branch, createdAt])
