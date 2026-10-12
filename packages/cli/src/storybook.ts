@@ -3,12 +3,17 @@ import { stat } from 'fs/promises';
 import { createServer, type Server } from 'http';
 import { extname, join, normalize, resolve, sep } from 'path';
 import type { Browser, BrowserContext, Page } from 'playwright';
+import { OptikClient } from '@optik/core';
+import { playwrightVersion } from './renderer';
 import { label, pool, withRun, type RunOptions, type RunResult } from './run';
+import { changedFilesSince, readStats, selectStories } from './turbosnap';
 
 export interface Story {
   id: string;
   title: string;
   name: string;
+  /** The story file, relative to the Storybook project ("./src/Button.stories.tsx") */
+  importPath?: string;
 }
 
 /** Story parameters optik reads: `parameters: { optik: { … } }` */
@@ -48,10 +53,24 @@ export interface StorybookOptions extends RunOptions {
    * container — instead of the locally installed browsers
    */
   renderer?: string;
+  /**
+   * TurboSnap: capture only the stories the changes since the last accepted
+   * run with the same settings can affect
+   */
+  onlyChanged?: {
+    /** Storybook's module graph: preview-stats.json of `storybook build --stats-json` */
+    statsFile: string;
+    /** Directory Storybook was built in (default: the current directory) */
+    projectDir?: string;
+    /** Storybook's config directory (default: <projectDir>/.storybook) */
+    configDir?: string;
+  };
 }
 
 export interface StorybookResult extends RunResult {
   skipped: string[];
+  /** Stories TurboSnap left out, because no change since the base commit affects them */
+  unaffected: number;
   /** Stories that failed to render, with the reason */
   errors: { name: string; message: string }[];
 }
@@ -82,7 +101,12 @@ export async function listStories(baseUrl: string): Promise<Story[]> {
     const entries = Object.values(index.entries ?? index.stories ?? {});
     return entries
       .filter((e) => (e as { type?: string }).type === undefined || (e as { type?: string }).type === 'story')
-      .map((e) => ({ id: e.id, title: e.title ?? (e as { kind?: string }).kind ?? '', name: e.name }));
+      .map((e) => ({
+        id: e.id,
+        title: e.title ?? (e as { kind?: string }).kind ?? '',
+        name: e.name,
+        ...(e.importPath ? { importPath: e.importPath } : {}),
+      }));
   }
   throw new Error(`No Storybook found at ${baseUrl} (neither index.json nor stories.json). Build it first: storybook build`);
 }
@@ -256,12 +280,15 @@ interface Worker {
  */
 export async function captureStorybook(baseUrl: string, options: StorybookOptions): Promise<StorybookResult> {
   const log = options.log ?? (() => {});
-  const stories = await listStories(baseUrl);
+  const allStories = await listStories(baseUrl);
   const timeout = options.timeout ?? 30_000;
   const browserNames = options.browsers?.length ? options.browsers : (['chromium'] as BrowserName[]);
   const defaultViewports = options.viewports?.length ? options.viewports : [{ width: 1280, height: 720 }];
   const skipped: string[] = [];
   const errors: StorybookResult['errors'] = [];
+
+  const key = captureKey(browserNames, defaultViewports, !!options.renderer);
+  const stories = options.onlyChanged ? await turboSnap(allStories, key, options) : allStories;
 
   const playwright = loadPlaywright();
   const browsers = new Map<BrowserName, Browser>();
@@ -303,7 +330,10 @@ export async function captureStorybook(baseUrl: string, options: StorybookOption
 
     const tasks = stories.flatMap((story) => browserNames.map((browser) => ({ story, browser })));
     const describe = `${stories.length} stories × ${browserNames.join(', ')} × ${defaultViewports.map(viewportName).join(', ')}`;
-    const result = await withRun(options, describe, (submit) =>
+    const result = await withRun(
+      options,
+      describe,
+      (submit) =>
       pool<{ story: Story; browser: BrowserName }, Worker>(
         tasks,
         (options.concurrency ?? 4) * browserNames.length,
@@ -370,11 +400,63 @@ export async function captureStorybook(baseUrl: string, options: StorybookOption
           for (const { context } of worker.pages.values()) await context.close();
         },
       ),
+      // Later TurboSnap runs build only on runs where every story was captured
+      () => (errors.length === 0 ? key : undefined),
     );
-    return { ...result, skipped: skipped.sort(), errors: errors.sort((a, b) => a.name.localeCompare(b.name)) };
+    return {
+      ...result,
+      skipped: skipped.sort(),
+      unaffected: allStories.length - stories.length,
+      errors: errors.sort((a, b) => a.name.localeCompare(b.name)),
+    };
   } finally {
     for (const browser of browsers.values()) await browser.close();
   }
+}
+
+/**
+ * What makes screenshots comparable: browsers, viewports, and where they
+ * render — the renderer container, or this machine's browsers (which render
+ * differently per OS and Playwright version).
+ */
+export function captureKey(browsers: BrowserName[], viewports: Viewport[], renderer: boolean): string {
+  return [
+    'storybook-1',
+    `browsers=${[...browsers].sort().join(',')}`,
+    `viewports=${viewports.map(viewportName).sort().join(',')}`,
+    renderer ? 'renderer' : `local-${process.platform}-${process.arch}`,
+    `playwright=${playwrightVersion()}`,
+  ].join(';');
+}
+
+/** The stories to capture with TurboSnap — all of them when it can't tell. */
+async function turboSnap(stories: Story[], key: string, options: StorybookOptions): Promise<Story[]> {
+  const log = options.log ?? (() => {});
+  const { statsFile, projectDir = process.cwd(), configDir } = options.onlyChanged!;
+  const everything = (reason: string) => {
+    log(`TurboSnap: capturing all ${stories.length} stories — ${reason}`);
+    return stories;
+  };
+
+  const client = new OptikClient({ token: options.token, serverUrl: options.serverUrl });
+  const base = await client.turboSnapBase(options.suite, key);
+  if (!base.commitSha) return everything('no earlier run with these settings whose changes are all accepted');
+  const changedFiles = changedFilesSince(base.commitSha, projectDir);
+  if (!changedFiles) {
+    return everything(`commit ${base.commitSha.slice(0, 7)} is not in the local git history (in CI: fetch-depth: 0)`);
+  }
+  const stats = await readStats(statsFile);
+  if (!stats) return everything(`no module graph at ${statsFile} — build with: storybook build --stats-json`);
+  if (stories.some((s) => !s.importPath)) return everything('the Storybook index has no story files (Storybook 7 or later needed)');
+
+  const selection = selectStories({ stats, stories, changedFiles, projectDir: resolve(projectDir), configDir });
+  if (selection.all) return everything(selection.reason);
+  const affected = stories.filter((s) => selection.storyIds.has(s.id));
+  log(
+    `TurboSnap: ${affected.length} of ${stories.length} stories affected by ${selection.changedFiles} changed ` +
+      `file${selection.changedFiles === 1 ? '' : 's'} since ${base.commitSha.slice(0, 7)}`,
+  );
+  return affected;
 }
 
 /** `optik storybook <dir or url>`: serves a build directory, or uses a running Storybook. */

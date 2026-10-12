@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { join, resolve } from 'path';
 import { parseArgs } from 'util';
 import type { RunResult } from './run';
 import { startRenderer, type Renderer } from './renderer';
@@ -30,6 +31,11 @@ Options:
   --renderer <ws-url>     storybook: use the browsers of an optik-renderer container
                           (default: OPTIK_RENDERER) for identical screenshots everywhere
   --docker                storybook: start the optik-renderer container for this run
+  --only-changed          storybook: TurboSnap — capture only the stories that changed files can
+                          affect since the last accepted run (needs storybook build --stats-json)
+  --stats-file <path>     storybook: Storybook's module graph (default: <build>/preview-stats.json)
+  --storybook-dir <path>  storybook: directory Storybook was built in (default: current directory)
+  --config-dir <path>     storybook: Storybook's config directory (default: <storybook-dir>/.storybook)
 
 Name, browser and viewport identify a snapshot: each combination has its own baseline.
   -h, --help              Show this help
@@ -73,6 +79,10 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
       timeout: { type: 'string', default: '30' },
       renderer: { type: 'string' },
       docker: { type: 'boolean' },
+      'only-changed': { type: 'boolean' },
+      'stats-file': { type: 'string' },
+      'storybook-dir': { type: 'string' },
+      'config-dir': { type: 'string' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
     },
@@ -135,22 +145,36 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
       console.error('Use either --docker or --renderer / OPTIK_RENDERER');
       return 2;
     }
+    const source = paths[0] ?? 'storybook-static';
+    const isUrl = /^https?:\/\//.test(source);
+    if (values['only-changed'] && isUrl && !values['stats-file']) {
+      console.error('--only-changed with a Storybook URL needs --stats-file (preview-stats.json of storybook build --stats-json)');
+      return 2;
+    }
     let container: Renderer | undefined;
     if (values.docker) container = await startRenderer(env.OPTIK_RENDERER_IMAGE || undefined, run.log);
     let result;
     try {
-      result = await storybook(paths[0] ?? 'storybook-static', {
+      result = await storybook(source, {
         ...run,
         suite: values.suite ?? 'storybook',
         browsers: [...new Set(browsers)] as BrowserName[],
         viewports: viewports as { width: number; height: number }[],
         timeout: timeout * 1000,
         renderer: container?.wsEndpoint ?? values.renderer ?? env.OPTIK_RENDERER,
+        onlyChanged: values['only-changed']
+          ? {
+              statsFile: values['stats-file'] ?? join(source, 'preview-stats.json'),
+              projectDir: values['storybook-dir'],
+              configDir: values['config-dir'] && resolve(values['config-dir']),
+            }
+          : undefined,
       });
     } finally {
       await container?.stop();
     }
     summary(result, [
+      [result.unaffected, 'unaffected stories (TurboSnap)'],
       [result.skipped.length, 'skipped'],
       [result.errors.length, 'failed to render'],
     ]);

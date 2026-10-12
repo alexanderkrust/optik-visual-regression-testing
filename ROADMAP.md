@@ -116,7 +116,7 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [x] **Storybook integration** — every story becomes a snapshot automatically (`optik storybook`: waits for rendering and play functions, freezes animations, `optik`/`chromatic` parameters)
 - [x] **Deterministic rendering container** shipped with optik (pinned browsers and fonts), so local machines and CI produce identical screenshots — `optik-renderer` image per Playwright version (immutable tags), `--docker` for Storybook, `rendererConnectOptions()` for the adapters
 - [x] Multiple browsers (Chromium, Firefox, WebKit) and viewports per run: a baseline per name, browser and viewport, reported by the adapters, `--browsers`/`--viewports` for Storybook; variant switcher in the review
-- [ ] Only re-check affected snapshots based on the git diff and dependency graph (like TurboSnap)
+- [x] Only re-check affected snapshots based on the git diff and dependency graph (like TurboSnap): `optik storybook --only-changed` with Storybook's module graph; never skips open changes
 - [x] Generic CLI (`npx @optik/cli upload <dir>`): any PNG screenshots as one run, exit code for CI; adapters share one API client
 - [ ] Cypress adapter
 

@@ -45,6 +45,8 @@ export async function withRun(
   options: RunOptions,
   describe: string,
   work: (submit: (name: string, png: Uint8Array, variant?: SnapshotVariant) => Promise<void>) => Promise<void>,
+  /** Capture settings to report on completion — called after `work`, so it can leave them out after errors */
+  captureKey: () => string | undefined = () => undefined,
 ): Promise<RunResult> {
   const log = options.log ?? (() => {});
   const client = new OptikClient({ token: options.token, serverUrl: options.serverUrl });
@@ -60,7 +62,7 @@ export async function withRun(
   });
 
   // A run without changes is merged into the previous one — link to that
-  const completed = await client.complete(run.id);
+  const completed = await client.complete(run.id, { captureKey: captureKey() });
   snapshots.sort((a, b) => label(a.name, a.variant).localeCompare(label(b.name, b.variant)));
   return {
     run: completed,

@@ -1,5 +1,11 @@
-import type { CreateRunDto, Run, SnapshotVariant, SubmittedSnapshot } from '@optik/shared';
+import type { CompleteRunDto, CreateRunDto, Run, SnapshotVariant, SubmittedSnapshot, TurboSnapBase } from '@optik/shared';
 import { getAncestorCommits, getCurrentBranch, getCurrentCommit, getPullRequest } from './git';
+
+function ancestorsWithHead(): string[] {
+  const head = getCurrentCommit();
+  const ancestors = getAncestorCommits();
+  return /^[0-9a-f]{7,64}$/i.test(head) && !ancestors.includes(head) ? [head, ...ancestors] : ancestors;
+}
 
 /** Base URL of the optik server (web UI and API share one origin). */
 export function resolveServerUrl(explicit?: string, env: NodeJS.ProcessEnv = process.env): string {
@@ -69,9 +75,25 @@ export class OptikClient {
     return this.request<SubmittedSnapshot>('/snapshots', `submit snapshot "${name}"`, { method: 'POST', body: form });
   }
 
-  /** Marks the run complete; a run without changes is merged into the previous one. */
-  async complete(runId: string): Promise<Run> {
-    return this.request<Run>(`/runs/${runId}/complete`, 'complete run', { method: 'POST' });
+  /**
+   * Marks the run complete; a run without changes is merged into the previous
+   * one. `captureKey`: the capture settings, only when nothing failed (TurboSnap).
+   */
+  async complete(runId: string, body: CompleteRunDto = {}): Promise<Run> {
+    return this.request<Run>(`/runs/${runId}/complete`, 'complete run', {
+      method: 'POST',
+      ...(body.captureKey ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+    });
+  }
+
+  /** The commit TurboSnap compares against for these capture settings — null: capture everything. */
+  async turboSnapBase(suite: string, captureKey: string): Promise<TurboSnapBase> {
+    return this.request<TurboSnapBase>('/runs/turbosnap-base', 'find the TurboSnap base', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // The current commit counts too: e.g. a re-run after accepting changes
+      body: JSON.stringify({ suite, captureKey, ancestors: ancestorsWithHead() }),
+    });
   }
 
   /** Absolute link for a path of the web UI, e.g. a snapshot's reviewPath. */

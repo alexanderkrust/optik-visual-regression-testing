@@ -163,8 +163,14 @@ export class AdapterClient {
     return call(`${this.api}/snapshots`, { token: this.token, form });
   }
 
-  complete(runId: string) {
-    return call(`${this.api}/runs/${runId}/complete`, { token: this.token, method: 'POST' });
+  complete(runId: string, captureKey?: string) {
+    return captureKey === undefined
+      ? call(`${this.api}/runs/${runId}/complete`, { token: this.token, method: 'POST' })
+      : call(`${this.api}/runs/${runId}/complete`, { token: this.token, json: { captureKey } });
+  }
+
+  turboSnapBase(ancestors: string[], captureKey: string, suite?: string) {
+    return call(`${this.api}/runs/turbosnap-base`, { token: this.token, json: { ancestors, captureKey, suite } });
   }
 
   /** A whole run: start, submit the given snapshots, complete. */
