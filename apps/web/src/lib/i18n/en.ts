@@ -503,6 +503,9 @@ export const en = {
     } as Record<string, { repository: string; token: string; apiUrlNote: string | null }>,
     failTests: 'Fail tests on visual changes',
     failTestsHint1: 'Turn off when the commit status blocks merging — CI then stays green and the status shows what needs review. Adapters can override this with',
+    ignoreAntiAliasing: 'Ignore changed edge pixels (anti-aliasing)',
+    ignoreAntiAliasingHint:
+      'Only for screenshots whose edge blending varies between runs, e.g. from different machines without the optik renderer. Small changes such as a corner radius then go unnoticed.',
     notifications: 'Notifications',
     notificationsIntro: 'Tell your team when a run has visual changes to review, and when the review is done.',
     eventChanges: 'changes',

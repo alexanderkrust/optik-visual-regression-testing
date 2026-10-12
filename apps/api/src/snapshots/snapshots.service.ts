@@ -109,7 +109,7 @@ export class SnapshotsService {
         suite: true,
         branch: true,
         ancestors: true,
-        project: { select: { slug: true, defaultBranch: true, failTestsOnChanges: true } },
+        project: { select: { slug: true, defaultBranch: true, failTestsOnChanges: true, ignoreAntiAliasing: true } },
       },
     });
     // A token may only write to runs of its own project; don't reveal others
@@ -138,6 +138,7 @@ export class SnapshotsService {
         image,
         baseline: baselineImage,
         ignoreRegions: settings.ignoreRegions,
+        ignoreAntiAliasing: run.project.ignoreAntiAliasing,
       });
     } catch {
       this.metrics.snapshots.inc({ status: 'invalid' });
@@ -331,7 +332,7 @@ export class SnapshotsService {
       where: { name, viewport, status: 'pending', baselineId: { not: null }, run: { projectId, suite } },
       select: { id: true, runId: true, baselineId: true },
     });
-    for (const change of open) await this.reevaluate(change, settings);
+    for (const change of open) await this.reevaluate(change, settings, project.ignoreAntiAliasing);
     await this.audit.record({
       action: 'snapshot.settings_updated',
       project: { id: project.id, slug: project.slug },
@@ -351,13 +352,19 @@ export class SnapshotsService {
   private async reevaluate(
     change: { id: string; runId: string; baselineId: string | null },
     settings: SnapshotSettings,
+    ignoreAntiAliasing: boolean,
   ) {
     const [image, baseline] = await Promise.all([
       this.storage.get(imageKey(change.runId, change.id)),
       this.getImageBuffer(change.baselineId!),
     ]).catch(() => [null, null]);
     if (!image || !baseline) return;
-    const { diff } = await this.diff.analyse({ image, baseline, ignoreRegions: settings.ignoreRegions });
+    const { diff } = await this.diff.analyse({
+      image,
+      baseline,
+      ignoreRegions: settings.ignoreRegions,
+      ignoreAntiAliasing,
+    });
     if (!diff || exceeds(diff, settings.threshold)) return;
 
     await this.prisma.snapshot.update({
@@ -456,7 +463,11 @@ function hasOwnDiff(s: { status: string; diffScore: number | null }) {
   return s.status === 'unchanged' && (s.diffScore ?? 0) > 0;
 }
 
-/** Whether a comparison counts as a change: a new size, or more changed pixels than allowed. */
+/**
+ * Whether a comparison counts as a change: a new size, or more changed pixels
+ * than allowed. Changed anti-aliased pixels are part of the count unless the
+ * project ignores them (see diffImages).
+ */
 function exceeds(diff: { diffCount: number; diffScore: number; sizeChanged: boolean }, threshold: number) {
   return diff.sizeChanged || (diff.diffCount > 0 && diff.diffScore > threshold);
 }

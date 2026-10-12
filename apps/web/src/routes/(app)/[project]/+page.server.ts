@@ -82,6 +82,7 @@ export const actions: Actions = {
       await api.projects.update(event.params.project, {
         defaultBranch,
         failTestsOnChanges: data.get('failTestsOnChanges') === 'on',
+        ignoreAntiAliasing: data.get('ignoreAntiAliasing') === 'on',
         ciProvider: field('ciProvider') as CiProvider | '',
         ciRepository: field('ciRepository'),
         ciApiUrl: field('ciApiUrl'),

@@ -313,6 +313,14 @@ An unreviewed change keeps failing in later runs as well.
 - **Comments** on every snapshot — written by reviewers, read by everyone in the project.
 - **Ignore regions and threshold** (*Ignore regions*, reviewers): drag rectangles over areas whose changes don't count — dates, animations, ads — and set the share of pixels that may change. They apply to the snapshot name in every later run of the project and suite, and open changes are checked again right away: a change that no longer counts becomes `unchanged`, and the commit status turns green without re-running CI. Size changes always count. Changes within the threshold keep their image and diff, so you can see what was tolerated.
 
+### Edge pixels (anti-aliasing)
+
+Browsers blend the pixels along edges — of rounded corners, borders, shadows and text — with the background. Small geometry changes only alter these blended pixels: a corner radius going from `6px` to `8px` changes a few dozen pixels in the corners and nothing else. optik counts them like any other changed pixel, so such changes need review.
+
+- In the **diff image**, changed edge pixels are **yellow**, all other changed pixels **red**. A diff with only yellow pixels is a change in shape or position by a pixel or less.
+- They are part of the share of changed pixels, so the **threshold** covers them too.
+- Screenshots taken with the same browser in the same environment — in particular with the [rendering container](#identical-screenshots-everywhere-the-rendering-container) — are pixel-identical from run to run, so edge pixels don't cause false changes. If yours come from machines whose edge blending varies (different GPUs, operating systems or font settings without the rendering container), turn on *Ignore changed edge pixels* under *Project → Settings*: they are then still shown in yellow, but don't count. Small changes like the corner radius above then go unnoticed — prefer the rendering container where you can.
+
 ### Runs without changes are merged
 
 Only runs that matter for review are kept. When a run finishes and all its snapshots are `unchanged`, it is merged into the previous run of the same suite and branch — as long as that one had no visual changes either. The new run is not stored; the previous one gets its *last run* time (`updatedAt`), a run counter and the latest commit updated. Images of unchanged snapshots are never stored, since they equal the baseline.
@@ -657,7 +665,7 @@ All endpoints live under `/api` on the same origin as the web UI. Swagger UI: `/
 | POST | `/api/snapshots/:id/comments` | Add a comment (reviewer) |
 | DELETE | `/api/snapshots/:id/comments/:commentId` | Delete a comment (author or maintainer) |
 | GET | `/api/projects/:slug` | Get a project |
-| PATCH | `/api/projects/:slug` | Update project settings (`defaultBranch`, `failTestsOnChanges`, `ciProvider`, `ciRepository`, `ciApiUrl`, `ciToken`) |
+| PATCH | `/api/projects/:slug` | Update project settings (`defaultBranch`, `failTestsOnChanges`, `ignoreAntiAliasing`, `ciProvider`, `ciRepository`, `ciApiUrl`, `ciToken`) |
 | GET | `/api/projects/:slug/notifications` | Notification channels (maintainer) |
 | POST | `/api/projects/:slug/notifications` | Add a channel (maintainer) |
 | DELETE | `/api/projects/:slug/notifications/:id` | Remove a channel (maintainer) |

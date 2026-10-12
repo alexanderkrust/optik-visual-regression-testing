@@ -503,6 +503,9 @@ export const de: Messages = {
     } as Record<string, { repository: string; token: string; apiUrlNote: string | null }>,
     failTests: 'Tests bei visuellen Änderungen fehlschlagen lassen',
     failTestsHint1: 'Ausschalten, wenn der Commit-Status das Mergen blockiert — die CI bleibt dann grün und der Status zeigt, was geprüft werden muss. Adapter können das überschreiben mit',
+    ignoreAntiAliasing: 'Geänderte Kantenpixel ignorieren (Anti-Aliasing)',
+    ignoreAntiAliasingHint:
+      'Nur für Screenshots, deren Kantenglättung zwischen Läufen schwankt, z. B. von verschiedenen Rechnern ohne den optik-Renderer. Kleine Änderungen wie ein Eckradius fallen dann nicht auf.',
     notifications: 'Benachrichtigungen',
     notificationsIntro: 'Informieren Sie Ihr Team, wenn ein Lauf visuelle Änderungen zu prüfen hat und wenn das Review abgeschlossen ist.',
     eventChanges: 'Änderungen',

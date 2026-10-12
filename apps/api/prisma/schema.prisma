@@ -24,6 +24,9 @@ model Project {
   /// Let tests fail on visual changes. Off when changes are reported as a
   /// commit status instead (CI stays green, the status blocks the merge).
   failTestsOnChanges Boolean @default(true) @map("fail_tests_on_changes")
+  /// Leave changed anti-aliased (edge) pixels out of comparisons, for
+  /// screenshots from renderers whose edge blending varies between runs
+  ignoreAntiAliasing Boolean @default(false) @map("ignore_anti_aliasing")
   /// Commit statuses: the CI system's provider, repository (format depends
   /// on the provider), API URL (null = the provider's cloud service) and the
   /// token, encrypted (see SecretBox)
