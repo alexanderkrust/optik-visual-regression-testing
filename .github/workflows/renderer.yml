@@ -36,8 +36,12 @@ jobs:
         with:
           node-version: 22
       - name: Render with every browser
+        # A client of the same Playwright version, outside the pnpm workspace
+        # (npm can't read the repository's workspace: dependencies)
+        working-directory: ${{ runner.temp }}
         run: |
-          npm install --no-save --no-audit --no-fund "playwright-core@$VERSION"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund "playwright-core@$VERSION"
           node -e '
             const pw = require("playwright-core");
             (async () => {
