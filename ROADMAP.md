@@ -118,7 +118,7 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 - [x] Multiple browsers (Chromium, Firefox, WebKit) and viewports per run: a baseline per name, browser and viewport, reported by the adapters, `--browsers`/`--viewports` for Storybook; variant switcher in the review
 - [ ] Only re-check affected snapshots based on the git diff and dependency graph (like TurboSnap)
 - [x] Generic CLI (`npx @optik/cli upload <dir>`): any PNG screenshots as one run, exit code for CI; adapters share one API client
-- [ ] Cypress adapter
+- [x] Cypress adapter (`@optik/cypress`: plugin for setupNodeEvents, `cy.optikSnapshot()` for pages and elements)
 
 ---
 
