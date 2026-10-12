@@ -16,6 +16,10 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+env:
+  # The Cypress adapter only needs Cypress's types — skip its ~500 MB app
+  CYPRESS_INSTALL_BINARY: '0'
+
 permissions:
   contents: write       # tag and GitHub release
   pull-requests: write  # "Version Packages" pull request
