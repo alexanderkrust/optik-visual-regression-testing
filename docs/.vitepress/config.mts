@@ -83,6 +83,9 @@ export default defineConfig({
         items: [
           { text: 'Security', link: '/security/' },
           { text: 'Verifying releases', link: '/security/verifying-releases' },
+          { text: 'Security whitepaper', link: '/security/whitepaper' },
+          { text: 'Questionnaire answers', link: '/security/questionnaire' },
+          { text: 'Penetration test', link: '/security/penetration-test' },
           { text: 'Privacy and accessibility', link: '/privacy' },
         ],
       },

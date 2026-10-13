@@ -1,0 +1,26 @@
+# Weekly update and security pull requests. Security updates for vulnerable
+# dependencies also arrive outside this schedule (enable "Dependabot security
+# updates" in the repository settings).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 10
+    groups:
+      # Patch and minor updates in one pull request; majors one by one
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Playwright upgrades need a matching optik-renderer image (docker/renderer/versions.txt)
+      - dependency-name: 'playwright'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions:
+        patterns: ['*']
+  - package-ecosystem: docker
+    directories: [/, /docker/renderer]
+    schedule: { interval: weekly, day: monday }

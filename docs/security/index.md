@@ -1,6 +1,6 @@
 # Security
 
-optik runs in your infrastructure and never contacts the vendor — see [Privacy](/privacy) for every outgoing connection and the personal data it stores. Releases are signed and come with SBOMs: [verifying releases](/security/verifying-releases).
+optik runs in your infrastructure and never contacts the vendor — see [Privacy](/privacy) for every outgoing connection and the personal data it stores. Releases are signed and come with SBOMs: [verifying releases](/security/verifying-releases). For security reviews and procurement: the [security whitepaper](/security/whitepaper), [questionnaire answers](/security/questionnaire) and the [penetration test](/security/penetration-test) scope.
 
 ## Built in
 
