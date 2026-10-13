@@ -1,6 +1,6 @@
 {
   "name": "@optik/cypress",
-  "version": "0.0.0",
+  "version": "0.3.0",
   "description": "Visual snapshots with optik in Cypress tests",
   "license": "Apache-2.0",
   "main": "./dist/plugin.js",
