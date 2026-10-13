@@ -1,6 +1,6 @@
 # Operating optik
 
-High availability, backup and restore. For installation see the [README](../README.md#quick-start); for monitoring see [Monitoring](../README.md#monitoring).
+High availability, backup and restore. For installation see the [Getting started](/guide/getting-started); for monitoring see [Monitoring](/install/monitoring).
 
 ## Where optik keeps its data
 

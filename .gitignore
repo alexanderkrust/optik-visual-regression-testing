@@ -29,3 +29,7 @@ __screenshots__/
 
 # OS
 .DS_Store
+
+# Documentation site
+docs/.vitepress/dist/
+docs/.vitepress/cache/
