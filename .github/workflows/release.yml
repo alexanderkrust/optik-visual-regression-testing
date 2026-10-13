@@ -230,7 +230,7 @@ jobs:
 
           Without internet access: download \`optik-$VERSION-airgap-<arch>.tar.gz\` below and follow the \`INSTALL.md\` inside.
 
-          Image digest: \`${{ steps.image.outputs.digest }}\` — signed with cosign (keyless), SBOM attached. See [Verifying releases](${{ github.server_url }}/${{ github.repository }}#verifying-releases).
+          Image digest: \`${{ steps.image.outputs.digest }}\` — signed with cosign (keyless), SBOM attached. See [Verifying releases](https://alexanderkrust.github.io/optik-visual-regression-testing/security/verifying-releases) and [upgrading](https://alexanderkrust.github.io/optik-visual-regression-testing/upgrading).
           NOTES
           gh release create "v$VERSION" \
             --target "$GITHUB_SHA" \
