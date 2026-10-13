@@ -224,7 +224,7 @@ pnpm --filter @optik/example exec dotenv -e ../../.env -- playwright test
 
 Each run shows up in the UI under the project, with one snapshot per `optikSnapshot` / `optik.snapshot` call.
 
-To try the review flow: run the tests once (all snapshots are `new`), change a component (e.g. a color in `apps/example/src/components/Button.tsx`) and run again — the affected tests fail with a review link. Accept the change in the UI and the next run passes; reject it and runs keep failing until the component is reverted. See [How reviews work](README.md#how-reviews-work).
+To try the review flow: run the tests once (all snapshots are `new`), change a component (e.g. a color in `apps/example/src/components/Button.tsx`) and run again — the affected tests fail with a review link. Accept the change in the UI and the next run passes; reject it and runs keep failing until the component is reverted. See [How optik works](docs/guide/introduction.md).
 
 ### Working on an adapter
 

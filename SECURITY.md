@@ -62,4 +62,4 @@ We won't pursue legal action against research done in good faith under this poli
 
 ## security.txt of your instance
 
-An optik instance serves `/.well-known/security.txt` ([RFC 9116](https://www.rfc-editor.org/rfc/rfc9116)) when its operator sets `SECURITY_TXT_CONTACT` — the contact is the operator's, for their installation. See the configuration reference in the [README](README.md#configuration).
+An optik instance serves `/.well-known/security.txt` ([RFC 9116](https://www.rfc-editor.org/rfc/rfc9116)) when its operator sets `SECURITY_TXT_CONTACT` — the contact is the operator's, for their installation. See the [configuration reference](docs/install/configuration.md).
