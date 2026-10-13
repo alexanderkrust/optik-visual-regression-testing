@@ -100,7 +100,12 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   // Fresh installation: send everyone to the first-run setup page
-  if (!event.locals.user && event.url.pathname !== '/setup' && (await setupRequired())) {
+  if (
+    !event.locals.user &&
+    event.url.pathname !== '/setup' &&
+    !event.url.pathname.startsWith('/.well-known/') &&
+    (await setupRequired())
+  ) {
     redirect(302, '/setup');
   }
 

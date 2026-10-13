@@ -6,10 +6,12 @@ name: Release
 #     release: signed multi-arch image with SBOM, Helm chart, air-gapped
 #     installation bundles, git tag and GitHub release. Versions that already
 #     have a tag are skipped. New optik-renderer versions are published too.
+#  3. LTS lines live on release/x.y branches (see docs/releases.md): the same
+#     flow publishes their patch releases, without moving the "latest" tags.
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   workflow_dispatch:
 
 concurrency:
@@ -42,7 +44,8 @@ jobs:
       - uses: changesets/action@v1
         with:
           version: pnpm version-packages
-          title: Version Packages
+          # One pull request per branch: main and each LTS line
+          title: ${{ github.ref_name == 'main' && 'Version Packages' || format('Version Packages ({0})', github.ref_name) }}
           commit: Version Packages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -53,6 +56,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
+      latest: ${{ steps.version.outputs.latest }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,6 +75,11 @@ jobs:
             echo "Releasing v$version"
             echo "release=true" >> "$GITHUB_OUTPUT"
           fi
+          # A patch of an older LTS line must not become "latest"
+          newest=$(printf '%s\n' $(git tag -l 'v*' | sed 's/^v//') "$version" | sort -V | tail -1)
+          if [ "$newest" = "$version" ]; then latest=true; else latest=false; fi
+          echo "Latest release: $latest"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
   renderer:
     name: Renderer images
@@ -119,6 +128,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.check.outputs.version }}
+      LATEST: ${{ needs.check.outputs.latest }}
     steps:
       - uses: actions/checkout@v4
       - name: Image and chart names
@@ -153,7 +163,7 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ env.VERSION }}
             ${{ env.IMAGE }}:${{ env.MINOR }}
-            ${{ env.IMAGE }}:latest
+            ${{ env.LATEST == 'true' && format('{0}:latest', env.IMAGE) || '' }}
           labels: |
             org.opencontainers.image.title=optik
             org.opencontainers.image.description=Self-hosted visual regression testing
@@ -224,6 +234,7 @@ jobs:
           NOTES
           gh release create "v$VERSION" \
             --target "$GITHUB_SHA" \
+            --latest="$LATEST" \
             --title "optik $VERSION" \
             --notes-file notes.md \
             "optik-$VERSION.spdx.json" "optik-$VERSION.tgz" bundles/*

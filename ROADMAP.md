@@ -125,8 +125,8 @@ Priced per organisation, tiered by the number of **reviewers** (people who can a
 ## Beyond code
 
 - [ ] Documentation site: installation, upgrades, configuration reference, adapters
-- [ ] Yearly LTS release with 12–18 months of security fixes; upgrade notes per release
-- [ ] Security advisories and `security.txt`
+- [x] Yearly LTS release with 18 months of security fixes; upgrade notes per release — policy (docs/releases.md), LTS branches in the release workflow, *Security fixes* and *Upgrade notes* sections in the release notes; the first LTS comes with 1.0
+- [x] Security advisories and `security.txt` — SECURITY.md (GitHub private reporting, response and fix targets), advisory process for maintainers, `/.well-known/security.txt` for operators (`SECURITY_TXT_CONTACT`)
 - [ ] Procurement material: security whitepaper, standard questionnaires (e.g. CAIQ), external penetration test
 - [ ] EULA and support terms (SLA) per edition — with legal review
 
