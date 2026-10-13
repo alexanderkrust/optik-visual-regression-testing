@@ -295,14 +295,16 @@ pnpm changeset
 
 ### Releasing (`.github/workflows/release.yml`)
 
-1. On every push to `main`, Changesets updates the **"Version Packages"** pull request (version bump + `CHANGELOG.md`).
+1. On every push to `main` (and to an LTS branch `release/x.y`), Changesets updates the **"Version Packages"** pull request of that branch (version bump + `CHANGELOG.md`). Changeset texts starting with `Security:` and paragraphs starting with `Upgrade:` get their own sections in the release notes — see [Releasing](docs/maintainers/releases.md).
 2. Merging it puts the new version on `main`. The workflow sees a version without a git tag and publishes it:
-   - multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/<owner>/optik:<version>`, `:<major.minor>`, `:latest`, with SBOM and SLSA provenance attestations
+   - multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/<owner>/optik:<version>`, `:<major.minor>` and — when it is the newest version overall, not an older LTS line's patch — `:latest`, with SBOM and SLSA provenance attestations
    - cosign signature (keyless) and SPDX SBOM attestation
    - Helm chart to `oci://ghcr.io/<owner>/charts/optik`, signed
    - air-gapped bundles per architecture ([scripts/airgap-bundle.sh](scripts/airgap-bundle.sh), templates in [docker/airgap/](docker/airgap/)), signed with `cosign sign-blob`
    - git tag `v<version>` and GitHub release with notes from the changelog; SBOM, chart and bundles attached
+   - new `optik-renderer` images from [docker/renderer/versions.txt](docker/renderer/versions.txt) (existing tags are never rebuilt)
 3. Version `0.0.0` is never released, and versions that already have a tag are skipped — re-running the workflow is safe.
+4. LTS lines and security fixes: [Releasing](docs/maintainers/releases.md), [Handling a vulnerability report](docs/maintainers/security-advisories.md).
 
 After the very first release, make the `optik` and `charts/optik` packages **public** in the GitHub package settings (GHCR packages of personal accounts start private).
 
