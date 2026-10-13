@@ -1,6 +1,6 @@
 {
   "name": "@optik/cli",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "description": "Upload screenshots and Storybook stories to optik from any tool",
   "license": "Apache-2.0",
   "bin": {
