@@ -30,9 +30,9 @@ or `docker compose up -d` from the repository (`docker-compose.yml`). Provide th
 | Single sign-on | OIDC (state, nonce, PKCE, issuer), SAML (signature wrapping, `InResponseTo`, replay, audience), account linking, group-to-role mapping |
 | Authorisation | access across projects and roles (IDOR on runs, snapshots, comments, tokens, members, settings), admin-only endpoints, teams, deactivated users |
 | API tokens | scope to one project, hashing, expiry, use against JWT-only endpoints |
-| Uploads | `POST /api/snapshots`: malformed and oversized PNGs, multipart edge cases, names and variants |
+| Uploads | `POST /api/snapshots`: malformed and oversized PNGs (file size, `MAX_IMAGE_PIXELS`), multipart edge cases, names and variants |
 | Images | signed URLs (expiry, tampering, other snapshots), image endpoints without a signature |
-| Integrations | webhook, CI API URLs and identity provider endpoints (see known issues), test notifications, error messages |
+| Integrations | webhook, CI API URLs and identity provider endpoints: SSRF protection ([outbound requests](/security/settings#outbound-requests), DNS rebinding, redirects, IPv6 forms), test notifications, error messages |
 | Web UI | XSS (comments, names, branch names, audit details), CSP, CSRF on form actions, clickjacking, open redirects (`returnTo`, `redirectTo`) |
 | SCIM | token handling, filters, provisioning of admins, deactivation |
 | Audit log | completeness for security events, tamper evidence, export (CSV injection) |
@@ -57,8 +57,7 @@ or `docker compose up -d` from the repository (`docker-compose.yml`). Provide th
 
 Already known and being fixed — report them only if you find a different way to exploit them:
 
-- **Server-side requests** to maintainer- and admin-configured URLs (webhooks, CI API URLs, OIDC issuer) are not restricted to non-internal addresses.
-- **Image dimensions** of uploads aren't limited before decoding (file size is: 50 MB).
+- **Server-side requests to private networks** are allowed by default (`OUTBOUND_ALLOW_PRIVATE=true`), as documented; test the default and `OUTBOUND_ALLOW_PRIVATE=false`.
 - **Framework dependencies** (NestJS 10 / Fastify 4) have published vulnerabilities fixed in newer major versions; the upgrade is in progress.
 
 See also the [whitepaper](/security/whitepaper#known-limitations).

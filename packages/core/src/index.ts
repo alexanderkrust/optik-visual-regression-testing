@@ -1,4 +1,5 @@
 export * from './diff';
+export * from './image-size';
 export * from './git';
 export * from './trim';
 export * from './hash';

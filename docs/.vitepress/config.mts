@@ -82,6 +82,7 @@ export default defineConfig({
         text: 'Security and privacy',
         items: [
           { text: 'Security', link: '/security/' },
+          { text: 'Security settings', link: '/security/settings' },
           { text: 'Verifying releases', link: '/security/verifying-releases' },
           { text: 'Security whitepaper', link: '/security/whitepaper' },
           { text: 'Questionnaire answers', link: '/security/questionnaire' },

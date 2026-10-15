@@ -25,7 +25,7 @@ Questions about the vendor as an organisation — certifications, staff screenin
 | Question | Answer | Who |
 |---|---|---|
 | Secure development practices? | Pull requests with automated checks (type checks, unit, integration and image tests); dependency pinning; signed releases. | optik |
-| Input validation, injection protection? | Inputs are validated in the services; database access only through parameterised queries (Prisma); uploads limited in size and decoded in worker threads; CSV export defuses formulas. | optik |
+| Input validation, injection protection? | Inputs are validated in the services; database access only through parameterised queries (Prisma); uploads limited in file size and pixels (checked before decoding) and decoded in worker threads; outbound requests to configured URLs are checked against loopback, link-local and cloud metadata addresses; CSV export defuses formulas. | optik |
 | Web security headers? | CSP `default-src 'self'`, `frame-ancestors 'none'`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS over HTTPS. | optik |
 | API authentication? | Users: short-lived JWTs (15 min) behind an encrypted session cookie; CI: project-scoped API tokens stored as hashes; SCIM and metrics: separate tokens. | optik |
 

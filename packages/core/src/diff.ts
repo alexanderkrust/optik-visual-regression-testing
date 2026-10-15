@@ -1,5 +1,6 @@
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
+import { checkPixels, checkPngPixels, DEFAULT_MAX_PIXELS } from './image-size';
 
 export interface DiffResult {
   /** Changed pixels; includes `aaCount` unless anti-aliasing is ignored. */
@@ -34,6 +35,12 @@ export interface DiffOptions {
    * with deterministic rendering, they are real changes.
    */
   ignoreAntiAliasing?: boolean;
+  /**
+   * Largest image, and largest comparison (both images padded to the larger
+   * width and height), in pixels; more throws ImageTooLargeError before
+   * anything is decoded. Default: DEFAULT_MAX_PIXELS (50 megapixels).
+   */
+  maxPixels?: number;
 }
 
 /** Diff image colors; grayscale background pixels can't take either. */
@@ -49,6 +56,7 @@ export function computeDiff(
   currentBuffer: Buffer,
   options: DiffOptions = {},
 ): DiffResult {
+  checkPngPixels(currentBuffer, baselineBuffer, options.maxPixels);
   return diffImages(PNG.sync.read(baselineBuffer), PNG.sync.read(currentBuffer), options);
 }
 
@@ -57,6 +65,7 @@ export function diffImages(baseline: PNG, current: PNG, options: DiffOptions = {
   const width = Math.max(baseline.width, current.width);
   const height = Math.max(baseline.height, current.height);
   const sizeChanged = baseline.width !== current.width || baseline.height !== current.height;
+  checkPixels({ width, height }, options.maxPixels ?? DEFAULT_MAX_PIXELS, 'The comparison');
 
   const a = pad(baseline, width, height);
   let b = pad(current, width, height);

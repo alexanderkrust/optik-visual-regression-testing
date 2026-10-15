@@ -8,6 +8,10 @@ optik runs in your infrastructure and never contacts the vendor — see [Privacy
 - **API and refresh tokens are stored hashed** (SHA-256); an API token is shown once on creation, the UI shows its prefix.
 - **Failed sign-ins are limited per account** (`LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES`), counted in the database for all instances.
 - **Security headers**: Content-Security-Policy for the web UI, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS over HTTPS.
+- **Outbound requests are restricted.** Webhooks, CI APIs and identity providers never reach loopback, link-local or cloud metadata addresses — checked when connecting, for every redirect — and their answers aren't passed on (`OUTBOUND_ALLOW_PRIVATE`, `OUTBOUND_ALLOWED_HOSTS`).
+- **Screenshot size is limited** in pixels (`MAX_IMAGE_PIXELS`), read from the PNG header before decoding.
+
+[Security settings](/security/settings) explains these settings and their trade-offs.
 
 ## Reporting vulnerabilities
 

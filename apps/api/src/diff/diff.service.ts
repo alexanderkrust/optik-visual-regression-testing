@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { availableParallelism } from 'os';
 import { join } from 'path';
 import { Piscina } from 'piscina';
+import { checkPngPixels, DEFAULT_MAX_PIXELS } from '@optik/core';
 import { analyse, AnalyseInput, AnalyseResult } from './analyse';
 
 /**
@@ -10,6 +11,9 @@ import { analyse, AnalyseInput, AnalyseResult } from './analyse';
  * large screenshots don't block the API's event loop and several diffs run in
  * parallel. DIFF_WORKERS sets the pool size (default: CPU cores, at most 4);
  * 0 runs them inline on the main thread.
+ *
+ * MAX_IMAGE_PIXELS (default 50 megapixels) limits screenshots and
+ * comparisons; larger ones throw ImageTooLargeError before they are decoded.
  */
 /** Screenshots waiting for a worker thread (for the optik_diff_queue metric). */
 export let diffQueueSize = () => 0;
@@ -18,8 +22,15 @@ export let diffQueueSize = () => 0;
 export class DiffService implements OnModuleDestroy {
   private readonly logger = new Logger(DiffService.name);
   private readonly pool: Piscina | null;
+  readonly maxPixels: number;
 
   constructor(config: ConfigService) {
+    const limit = config.get<string>('MAX_IMAGE_PIXELS');
+    this.maxPixels = limit ? Number(limit) : DEFAULT_MAX_PIXELS;
+    if (!Number.isFinite(this.maxPixels) || this.maxPixels < 1) {
+      throw new Error(`MAX_IMAGE_PIXELS must be a positive number of pixels, not "${limit}"`);
+    }
+
     const configured = config.get<string>('DIFF_WORKERS');
     const size =
       configured !== undefined && configured !== ''
@@ -46,6 +57,9 @@ export class DiffService implements OnModuleDestroy {
   }
 
   async analyse(input: AnalyseInput): Promise<AnalyseResult> {
+    // Here too, not only in the worker: errors from worker threads lose their class
+    checkPngPixels(input.image, input.baseline, this.maxPixels);
+    input = { ...input, maxPixels: this.maxPixels };
     if (!this.pool) return analyse(input);
     const result = (await this.pool.run(input)) as AnalyseResult;
     // Typed arrays come back as plain Uint8Arrays — hand out Buffers again

@@ -6,6 +6,7 @@ import { publicUrl } from '../common/public-url';
 import type { CiProvider } from '@prisma/client';
 import { CommitState, PROVIDERS } from './providers';
 import { MetricsService } from '../observability/metrics.service';
+import { describeOutboundError, outboundFetch } from '../common/outbound';
 
 export type { CommitState };
 
@@ -112,7 +113,7 @@ export class CommitStatusService {
 
     for (const { url, init } of requests) {
       try {
-        const res = await fetch(url, { ...init, signal: AbortSignal.timeout(10_000) });
+        const res = await outboundFetch(url, { ...init, signal: AbortSignal.timeout(10_000) });
         const body = res.ok ? '' : await res.text();
         // GitLab refuses to set a status that a commit already has
         if (res.ok || (ciProvider === 'gitlab' && res.status === 400 && body.includes('Cannot transition status'))) {
@@ -120,10 +121,11 @@ export class CommitStatusService {
           continue;
         }
         this.metrics.commitStatuses.inc({ provider: ciProvider, result: 'failed' });
-        this.logger.warn(`${where} failed: ${res.status} ${body.slice(0, 500)}`);
+        // Only the status: the answer could come from anywhere the API URL points to
+        this.logger.warn(`${where} failed: ${provider.label} answered ${res.status}`);
       } catch (err) {
         this.metrics.commitStatuses.inc({ provider: ciProvider, result: 'failed' });
-        this.logger.warn(`${where} failed: ${(err as Error).message}`);
+        this.logger.warn(`${where} failed: ${describeOutboundError(err)}`);
       }
     }
   }

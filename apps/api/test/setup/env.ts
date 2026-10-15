@@ -16,4 +16,6 @@ Object.assign(process.env, {
   // No admin from the environment: tests control user creation
   ADMIN_EMAIL: '',
   ADMIN_PASSWORD: '',
+  // The fake CI systems, webhook receivers and identity providers listen on 127.0.0.1
+  OUTBOUND_ALLOWED_HOSTS: '127.0.0.1',
 });

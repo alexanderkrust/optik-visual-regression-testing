@@ -18,6 +18,9 @@ Only `DATABASE_URL` is required. Every variable also accepts a `<NAME>_FILE` var
 | `JWT_ACCESS_EXPIRES` | `15m` | Access token lifetime |
 | `JWT_REFRESH_EXPIRES` | `7d` | Refresh token lifetime |
 | `DIFF_WORKERS` | CPU cores, max. 4 | Worker threads for decoding and diffing screenshots; `0` runs them on the main thread |
+| `MAX_IMAGE_PIXELS` | `50000000` | Largest screenshot — and comparison of a screenshot with its baseline — in pixels; larger uploads get a 400 before they are decoded. Decoded images take 4 bytes per pixel ([details](/security/settings#screenshot-size)) |
+| `OUTBOUND_ALLOW_PRIVATE` | `true` | Let webhooks, CI APIs and identity providers be on private networks (10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7). Loopback, link-local and cloud metadata addresses are always refused ([details](/security/settings#outbound-requests)) |
+| `OUTBOUND_ALLOWED_HOSTS` | — | Exceptions to the outbound rules: host names (`gitlab.internal`, `*.corp.example`), addresses and CIDR ranges (`10.20.0.0/16`), comma-separated |
 | `LOGIN_MAX_FAILURES` | `10` | Failed sign-ins per account before it is temporarily blocked |
 | `LOGIN_LOCKOUT_MINUTES` | `15` | Time window for failed sign-ins (and maximum block duration) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Create the admin account on start instead of the setup page (automated installs) |

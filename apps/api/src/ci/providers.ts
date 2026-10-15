@@ -1,4 +1,5 @@
 import type { CiProvider } from '@optik/shared';
+import type { RequestInit } from 'undici';
 
 export type CommitState = 'pending' | 'success' | 'failure';
 

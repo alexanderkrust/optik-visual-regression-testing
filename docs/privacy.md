@@ -16,6 +16,8 @@ The only outgoing connections are the integrations an admin sets up:
 | Identity providers (OIDC discovery, token, userinfo, JWKS) | single sign-on | *Single sign-on* |
 | OpenTelemetry collector | tracing | `OTEL_EXPORTER_OTLP_ENDPOINT` |
 
+Webhooks, CI systems and identity providers are restricted to addresses the outbound policy allows — never loopback, link-local or cloud metadata addresses — see [security settings](/security/settings#outbound-requests).
+
 The web UI loads nothing from other sites: its Content Security Policy only allows optik's own address (`default-src 'self'`, `connect-src 'self'`).
 
 ## Personal data optik stores
