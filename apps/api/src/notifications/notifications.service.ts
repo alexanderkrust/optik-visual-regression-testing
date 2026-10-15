@@ -13,6 +13,7 @@ import type { NotificationChannel as ChannelRow } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { SecretBox } from '../common/secret-box';
 import { publicUrl } from '../common/public-url';
+import { describeOutboundError, outboundFetch, outboundUrlProblem } from '../common/outbound';
 import { AccessService, CurrentUser } from '../access/access.service';
 import { MailerService } from './mailer.service';
 import { AuditTrail } from '../audit/audit-trail';
@@ -220,19 +221,24 @@ export class NotificationsService {
         }
       }
     } catch (err) {
-      this.logger.warn(`Notification to ${channel.type} channel ${channel.label} failed: ${(err as Error).message}`);
+      this.logger.warn(`Notification to ${channel.type} channel ${channel.label} failed: ${describeOutboundError(err)}`);
       return false;
     }
   }
 
+  /** POSTs through the outbound guard; the answer is never read, only its status. */
   private async post(url: string, body: unknown, headers: Record<string, string> = {}) {
-    const res = await fetch(url, {
+    const res = await outboundFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
       body: typeof body === 'string' ? body : JSON.stringify(body),
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) throw new Error(`${res.status} ${await res.text().catch(() => '')}`.trim());
+    await res.body?.cancel().catch(() => undefined);
+    if (!res.ok) {
+      this.logger.warn(`Notification to ${new URL(url).host} answered ${res.status}`);
+      return false;
+    }
     return true;
   }
 }
@@ -286,6 +292,8 @@ function validTarget(type: NotificationChannelType, value: string | undefined) {
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new BadRequestException('target must be an http(s) URL');
   }
+  const problem = outboundUrlProblem(url);
+  if (problem) throw new BadRequestException(`target: ${problem}`);
   // The path of Slack / Teams webhook URLs is the secret — show only a hint
   return { target: url.toString(), label: `${url.host}/…${url.pathname.slice(-4)}` };
 }

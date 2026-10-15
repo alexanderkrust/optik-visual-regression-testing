@@ -128,6 +128,9 @@ importers:
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      undici:
+        specifier: ^7.27.1
+        version: 7.27.1
     devDependencies:
       '@nestjs/cli':
         specifier: ^10.0.0
@@ -14845,8 +14848,7 @@ snapshots:
 
   undici-types@7.19.2: {}
 
-  undici@7.27.1:
-    optional: true
+  undici@7.27.1: {}
 
   universalify@0.1.2: {}
 

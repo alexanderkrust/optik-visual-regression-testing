@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Alexander Rust. Part of optik Enterprise: licensed under
 // the optik Enterprise License (ee/LICENSE in the repository root), not Apache-2.0.
 import { createHash, randomBytes } from 'crypto';
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
+import { createLocalJWKSet, errors, jwtVerify, type JSONWebKeySet, type JWTPayload } from 'jose';
+import { describeOutboundError, outboundFetch } from '../../common/outbound';
 
 /** The parts of an OpenID provider's discovery document optik uses. */
 export interface Discovery {
@@ -23,9 +24,41 @@ export interface OidcClient {
 
 const TIMEOUT = 10_000;
 const DISCOVERY_TTL = 60 * 60 * 1000;
+const KEYS_TTL = 10 * 60 * 1000;
+/** Unknown key IDs refetch the JWKS (key rotation), but at most this often */
+const KEYS_COOLDOWN = 30 * 1000;
 
 const discoveries = new Map<string, { at: number; value: Discovery }>();
-const keySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+const keySets = new Map<string, { at: number; keys: ReturnType<typeof createLocalJWKSet> }>();
+
+/**
+ * GET of a provider URL through the outbound guard. Errors say what failed,
+ * never what the server answered: issuer URLs can point anywhere.
+ */
+async function getJson(url: string, headers: Record<string, string> = {}): Promise<unknown> {
+  const res = await outboundFetch(url, {
+    headers: { Accept: 'application/json', ...headers },
+    signal: AbortSignal.timeout(TIMEOUT),
+  }).catch((err) => {
+    throw new Error(`${url} can't be reached: ${describeOutboundError(err)}`);
+  });
+  if (!res.ok) throw new Error(`${url} answered ${res.status}`);
+  return res.json().catch(() => {
+    throw new Error(`${url} did not answer with JSON`);
+  });
+}
+
+/** The provider's signing keys, cached; `fresh` refetches unless they were just fetched. */
+async function keySet(uri: string, fresh = false) {
+  const cachedKeys = keySets.get(uri);
+  const age = cachedKeys ? Date.now() - cachedKeys.at : Infinity;
+  if (cachedKeys && age < (fresh ? KEYS_COOLDOWN : KEYS_TTL)) return cachedKeys.keys;
+  const jwks = (await getJson(uri)) as JSONWebKeySet;
+  if (!Array.isArray(jwks?.keys)) throw new Error(`${uri} is not a JSON Web Key Set`);
+  const keys = createLocalJWKSet(jwks);
+  keySets.set(uri, { at: Date.now(), keys });
+  return keys;
+}
 
 /** Reads (and caches for an hour) the provider's /.well-known/openid-configuration. */
 export async function discover(issuer: string, { fresh = false } = {}): Promise<Discovery> {
@@ -33,15 +66,15 @@ export async function discover(issuer: string, { fresh = false } = {}): Promise<
   if (!fresh && cached && Date.now() - cached.at < DISCOVERY_TTL) return cached.value;
 
   const url = `${issuer.replace(/\/+$/, '')}/.well-known/openid-configuration`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT), headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`${url} answered ${res.status}`);
-  const value = (await res.json()) as Discovery;
+  const value = ((await getJson(url)) ?? {}) as Discovery;
   for (const field of ['issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri'] as const) {
-    if (typeof value[field] !== 'string') throw new Error(`The discovery document has no ${field}`);
+    if (typeof value[field] !== 'string') throw new Error(`${url} is not an OpenID discovery document (no ${field})`);
   }
   // The document must belong to the configured issuer (Entra: use the tenant URL, not "common")
   if (value.issuer.replace(/\/+$/, '') !== issuer.replace(/\/+$/, '')) {
-    throw new Error(`The provider calls itself "${value.issuer}", not "${issuer}"`);
+    // Echo the issuer only when it is one — it helps with e.g. Entra tenant URLs
+    const named = /^https?:\/\/[^\s"]{1,200}$/.test(value.issuer) ? `"${value.issuer}"` : 'something else';
+    throw new Error(`The provider calls itself ${named}, not "${issuer}"`);
   }
   discoveries.set(issuer, { at: Date.now(), value });
   return value;
@@ -100,24 +133,36 @@ export async function completeSignIn(
     if (client.clientSecret) body.set('client_secret', client.clientSecret);
   }
 
-  const res = await fetch(d.token_endpoint, { method: 'POST', headers, body, signal: AbortSignal.timeout(TIMEOUT) });
+  const res = await outboundFetch(d.token_endpoint, {
+    method: 'POST',
+    headers,
+    body,
+    signal: AbortSignal.timeout(TIMEOUT),
+  }).catch((err) => {
+    throw new Error(`The token endpoint can't be reached: ${describeOutboundError(err)}`);
+  });
   const tokens = (await res.json().catch(() => ({}))) as { id_token?: string; access_token?: string; error?: string; error_description?: string };
   if (!res.ok || !tokens.id_token) {
-    throw new Error(`The provider refused the sign-in: ${tokens.error_description ?? tokens.error ?? res.status}`);
+    // OAuth error codes and descriptions are meant for people; anything else is not shown
+    const reason = [tokens.error_description, tokens.error].find((v) => typeof v === 'string');
+    throw new Error(`The provider refused the sign-in: ${reason ? reason.slice(0, 200) : res.status}`);
   }
 
-  let keys = keySets.get(d.jwks_uri);
-  if (!keys) keySets.set(d.jwks_uri, (keys = createRemoteJWKSet(new URL(d.jwks_uri))));
-  const { payload } = await jwtVerify(tokens.id_token, keys, {
-    issuer: d.issuer,
-    audience: client.clientId,
-    clockTolerance: 60,
-  });
+  const verify = async (fresh: boolean) =>
+    jwtVerify(tokens.id_token!, await keySet(d.jwks_uri, fresh), {
+      issuer: d.issuer,
+      audience: client.clientId,
+      clockTolerance: 60,
+    });
+  // A key ID the cached set doesn't have: the provider may have rotated its keys
+  const { payload } = await verify(false).catch((err) =>
+    err instanceof errors.JWKSNoMatchingKey ? verify(true) : Promise.reject(err),
+  );
   if (payload.nonce !== nonce) throw new Error('The ID token does not belong to this sign-in (nonce)');
 
   const claims: Record<string, unknown> = { ...(payload as JWTPayload) };
   if (d.userinfo_endpoint && tokens.access_token) {
-    const info = await fetch(d.userinfo_endpoint, {
+    const info = await outboundFetch(d.userinfo_endpoint, {
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(TIMEOUT),
     })

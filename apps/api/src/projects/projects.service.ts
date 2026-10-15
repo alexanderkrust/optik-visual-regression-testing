@@ -18,6 +18,7 @@ import type {
 import { AccessService, CurrentUser, effectiveRole, rolesOf } from '../access/access.service';
 import { CI_PROVIDERS, checkRepository, PROVIDERS } from '../ci/providers';
 import { AuditTrail } from '../audit/audit-trail';
+import { outboundUrlProblem } from '../common/outbound';
 
 export interface SetProjectMemberDto {
   email: string;
@@ -31,12 +32,18 @@ function apiUrl(value: string | undefined): string | null | undefined {
   if (value === undefined) return undefined;
   const url = value.trim().replace(/\/+$/, '');
   if (!url) return null;
+  let parsed: URL | null = null;
   try {
-    if (['http:', 'https:'].includes(new URL(url).protocol)) return url;
+    parsed = new URL(url);
   } catch {
     // fall through
   }
-  throw new BadRequestException('ciApiUrl must be an http(s) URL');
+  if (!parsed || !['http:', 'https:'].includes(parsed.protocol)) {
+    throw new BadRequestException('ciApiUrl must be an http(s) URL');
+  }
+  const problem = outboundUrlProblem(parsed);
+  if (problem) throw new BadRequestException(`ciApiUrl: ${problem}`);
+  return url;
 }
 
 /** "" clears the setting, undefined leaves it unchanged. */

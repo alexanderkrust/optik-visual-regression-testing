@@ -16,6 +16,7 @@ type SnapshotRow = PrismaSnapshot & {
 import { StorageService } from '../storage/storage.service';
 import { diffKey, imageKey } from './storage-keys';
 import { DiffService } from '../diff/diff.service';
+import { ImageTooLargeError } from '@optik/core';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditTrail } from '../audit/audit-trail';
 import { MetricsService } from '../observability/metrics.service';
@@ -140,8 +141,11 @@ export class SnapshotsService {
         ignoreRegions: settings.ignoreRegions,
         ignoreAntiAliasing: run.project.ignoreAntiAliasing,
       });
-    } catch {
+    } catch (err) {
       this.metrics.snapshots.inc({ status: 'invalid' });
+      if (err instanceof ImageTooLargeError) {
+        throw new BadRequestException(`Snapshot "${name}": ${err.message} (MAX_IMAGE_PIXELS)`);
+      }
       throw new BadRequestException(`Snapshot "${name}" is not a valid PNG`);
     } finally {
       timer();
@@ -359,12 +363,12 @@ export class SnapshotsService {
       this.getImageBuffer(change.baselineId!),
     ]).catch(() => [null, null]);
     if (!image || !baseline) return;
-    const { diff } = await this.diff.analyse({
-      image,
-      baseline,
-      ignoreRegions: settings.ignoreRegions,
-      ignoreAntiAliasing,
-    });
+    // Stays pending if it can't be compared (e.g. above a lowered MAX_IMAGE_PIXELS)
+    const analysis = await this.diff
+      .analyse({ image, baseline, ignoreRegions: settings.ignoreRegions, ignoreAntiAliasing })
+      .catch((err) => (err instanceof ImageTooLargeError ? null : Promise.reject(err)));
+    if (!analysis) return;
+    const { diff } = analysis;
     if (!diff || exceeds(diff, settings.threshold)) return;
 
     await this.prisma.snapshot.update({

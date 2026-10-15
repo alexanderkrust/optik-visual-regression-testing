@@ -13,6 +13,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { configureApp } from './app.setup';
 import { ensureSecrets, loadFileSecrets } from './bootstrap/env';
+import { outboundPolicy } from './common/outbound';
 import { JsonLogger } from './observability/json-logger';
 
 const logger = new Logger('Bootstrap');
@@ -32,6 +33,8 @@ async function bootstrap() {
   );
 
   await configureApp(app);
+  // .env is loaded by now: fail on an invalid OUTBOUND_ALLOWED_HOSTS here rather than on the first webhook
+  outboundPolicy();
 
   const config = new DocumentBuilder()
     .setTitle('Optik API')

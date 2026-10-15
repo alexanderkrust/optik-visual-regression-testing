@@ -23,6 +23,7 @@ import type { IdentityProvider as ProviderRow, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { SecretBox } from '../../common/secret-box';
 import { publicUrl } from '../../common/public-url';
+import { outboundUrlProblem } from '../../common/outbound';
 import { AuditTrail } from '../../audit/audit-trail';
 import { AuthService, SessionTokens } from '../../auth/auth.service';
 import { LoginPolicy } from '../../auth/login-policy';
@@ -586,7 +587,12 @@ function validate(dto: SaveIdentityProviderDto, current: ProviderRow | null) {
 
   // SAML entity IDs may be URNs; OIDC issuers are URLs
   let issuer = text(dto?.issuer, protocol === 'saml' ? 'The entity ID of the provider' : 'issuer');
-  if (protocol === 'oidc') issuer = httpUrl(issuer.replace(/\/+$/, ''), 'issuer');
+  if (protocol === 'oidc') {
+    issuer = httpUrl(issuer.replace(/\/+$/, ''), 'issuer');
+    // optik fetches discovery, keys and tokens from the issuer (SAML entry points are only browser redirects)
+    const problem = outboundUrlProblem(new URL(issuer));
+    if (problem) throw new BadRequestException(`issuer: ${problem}`);
+  }
   const scopes = (dto.scopes ?? current?.scopes ?? 'openid email profile').trim();
   if (protocol === 'oidc' && !scopes.split(/\s+/).includes('openid')) {
     throw new BadRequestException('scopes must include "openid"');

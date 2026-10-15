@@ -51,6 +51,27 @@ export function png(gray: number, width = 10, height = 10): Buffer {
   return PNG.sync.write(image);
 }
 
+/**
+ * A valid 1×1 PNG whose header claims `width` × `height` pixels — a
+ * "decompression bomb" as far as a decoder that trusts the header is concerned.
+ */
+export function pngClaiming(width: number, height: number): Buffer {
+  const data = png(0, 1, 1);
+  data.writeUInt32BE(width, 16);
+  data.writeUInt32BE(height, 20);
+  data.writeUInt32BE(crc32(data.subarray(12, 29)), 29);
+  return data;
+}
+
+function crc32(bytes: Uint8Array): number {
+  let c = 0xffffffff;
+  for (const byte of bytes) {
+    c ^= byte;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
 export interface Res<T = any> {
   status: number;
   body: T;

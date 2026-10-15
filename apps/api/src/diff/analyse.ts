@@ -1,5 +1,5 @@
 import { PNG } from 'pngjs';
-import { diffImages, hashImage, type Region } from '@optik/core';
+import { checkPngPixels, diffImages, hashImage, type Region } from '@optik/core';
 
 export interface AnalyseInput {
   image: Uint8Array;
@@ -8,6 +8,8 @@ export interface AnalyseInput {
   ignoreRegions?: Region[];
   /** Leave changed anti-aliased pixels out (project setting) */
   ignoreAntiAliasing?: boolean;
+  /** Largest image and comparison in pixels (MAX_IMAGE_PIXELS) */
+  maxPixels?: number;
 }
 
 export interface AnalyseResult {
@@ -29,9 +31,11 @@ const toBuffer = (data: Uint8Array) => Buffer.from(data.buffer, data.byteOffset,
 /**
  * The CPU-heavy part of a snapshot upload: decode the screenshot, hash its
  * pixels and compare it with the baseline. Runs in a worker thread (see
- * DiffService); throws for images that are not valid PNGs.
+ * DiffService); throws for images that are not valid PNGs, and — before
+ * decoding anything — for images above `maxPixels`.
  */
-export function analyse({ image, baseline, ignoreRegions, ignoreAntiAliasing }: AnalyseInput): AnalyseResult {
+export function analyse({ image, baseline, ignoreRegions, ignoreAntiAliasing, maxPixels }: AnalyseInput): AnalyseResult {
+  checkPngPixels(image, baseline, maxPixels);
   const current = PNG.sync.read(toBuffer(image));
   const imageHash = hashImage(current);
   if (!baseline) return { imageHash, diff: null };
@@ -39,6 +43,7 @@ export function analyse({ image, baseline, ignoreRegions, ignoreAntiAliasing }: 
   const result = diffImages(PNG.sync.read(toBuffer(baseline)), current, {
     ignoreRegions,
     ignoreAntiAliasing,
+    maxPixels,
   });
   return {
     imageHash,
