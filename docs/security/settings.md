@@ -1,6 +1,6 @@
 # Security settings
 
-How optik protects itself against misuse by people who can change settings or upload screenshots, and what you can tune. Reporting vulnerabilities: [SECURITY.md](../SECURITY.md).
+How optik protects itself against misuse by people who can change settings or upload screenshots, and what you can tune. The variables are listed in [configuration](/install/configuration).
 
 ## Outbound requests
 

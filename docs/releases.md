@@ -6,7 +6,7 @@ optik has one version for everything it ships: the server image, the Helm chart,
 
 Every release is announced as a [GitHub release](https://github.com/alexanderkrust/optik-visual-regression-testing/releases) with its notes, the signed image digest, the Helm chart and air-gapped bundles. The notes list, in this order:
 
-- **Security fixes** — see [SECURITY.md](../SECURITY.md);
+- **Security fixes** — see [security policy](https://github.com/alexanderkrust/optik-visual-regression-testing/blob/main/SECURITY.md);
 - **Upgrade notes** — anything to do before or after upgrading;
 - all other changes.
 
@@ -31,4 +31,4 @@ Images: `ghcr.io/alexanderkrust/optik:<version>`; `:<major>.<minor>` follows the
 
 Upgrade from any release to any newer one directly — from one LTS to the next, too; there are no required intermediate versions. Database migrations run on start. See [Upgrading](upgrading.md) for the procedure and how to go back.
 
-Licenses: a license key unlocks every release built within its update period (see the [README](../README.md#editions-and-license)); LTS patch releases of a line you already run count by their own build date.
+Licenses: a license key unlocks every release built within its update period (see the [editions and license](/enterprise/editions)); LTS patch releases of a line you already run count by their own build date.
